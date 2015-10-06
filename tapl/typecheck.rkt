@@ -1,6 +1,6 @@
 #lang racket/base
 (require
-  (for-syntax (except-in racket extends) (only-in srfi/13 string-prefix?)
+  (for-syntax (except-in racket extends)
               syntax/parse racket/syntax syntax/stx racket/stxparam
               "stx-utils.rkt"
               syntax/parse/debug)
