@@ -69,15 +69,21 @@
 
 (define-typed-syntax λ
   [(_ bvs:type-ctx e)
-   #:with (xs- e- τ_res) (infer/ctx+erase #'bvs #'e)
-   (⊢ (λ xs- e-) : (→ bvs.type ... τ_res))])
+   ;#:with (xs- e- τ_res) (infer/ctx+erase #'bvs #'e)
+   bvs ⊢ e ≫ e- : τ_res
+   ⊢ (λ xs- e-) : (→ bvs.type ... τ_res)])
 
 (define-typed-syntax #%app
   [(_ e_fn e_arg ...)
-   #:with [e_fn- (τ_in ... τ_out)] (⇑ e_fn as →)
-   #:with ([e_arg- τ_arg] ...) (infers+erase #'(e_arg ...))
-   #:fail-unless (typechecks? #'(τ_arg ...) #'(τ_in ...))
-                 (string-append
+   ⊢ e_fn ≫ e_fn- : (→ τ_in ... τ_out)
+   ;#:with [e_fn- (τ_in ... τ_out)] (⇑ e_fn as →)
+   ⊢ e_arg ≫ e_arg- : τ_arg
+   ...
+   ;#:with ([e_arg- τ_arg] ...) (infers+erase #'(e_arg ...))
+   τ_arg ⊑ τ_in
+   ...
+   ;#:fail-unless (typechecks? #'(τ_arg ...) #'(τ_in ...))
+   #:with-msg (string-append
                   (format "~a (~a:~a) Arguments to function ~a have wrong type(s), "
                           (syntax-source stx) (syntax-line stx) (syntax-column stx)
                           (syntax->datum #'e_fn))
@@ -90,4 +96,4 @@
                   (format "Expected: ~a arguments with type(s): "
                           (stx-length #'(τ_in ...)))
                   (string-join (stx-map type->str #'(τ_in ...)) ", "))
-  (⊢ (#%app e_fn- e_arg- ...) : τ_out)])
+  ⊢ (#%app e_fn- e_arg- ...) : τ_out])

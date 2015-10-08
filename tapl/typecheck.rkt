@@ -43,10 +43,52 @@
   (car (string-split filename ".")))
 
 (begin-for-syntax
-  (define-syntax-parameter stx (syntax-rules ())))
+  (define-syntax-parameter stx (syntax-rules ()))
+
+  ;; e-typed ≫ e-erased : τ
+  ;; = "e-typed erases (ie, expands) to e-erased, with type τ (attached)"
+  ;; τ1 ⊑ τ2
+  ;; = "τ1 typechecks against τ2"
+  ;; (ie ((current-typecheck-relation) τ1 τ2) => true
+  (define (process-clauses clauses)
+    (syntax-parse clauses #:datum-literals (≫ : ⊑ ⊢)
+      ; with environment
+      [(Γ ⊢ e-typed ≫ e-erased : τ_e . rst)
+       #:with xs- (datum->syntax #'e-erased 'xs-)
+       #`(#:with [xs- e-erased τ_e] (infer/ctx+erase #'Γ #'e-typed)
+          #,@(process-clauses #'rst))]
+      ; tycon
+      [(⊢ e-typed ≫ e-erased : (tycon . tyargs) . rst)
+       #`(#:with [e-erased tyargs] (⇑ e-typed as tycon)
+          #,@(process-clauses #'rst))]
+      ; non-tycon + dots
+      [(⊢ e-typed ≫ e-erased : τ_e (~and (~literal ...) dots) . rst)
+       #`(#:with ([e-erased τ_e] dots) (infers+erase #'(e-typed dots))
+          #,@(process-clauses #'rst))]
+      [(τ1 ⊑ τ2 (~and (~literal ...) dots) #:with-msg msg . rst)
+       #`(#:fail-unless (typechecks? #'(τ1 dots) #'(τ2 dots)) msg
+          #,@(process-clauses #'rst))]              
+      [_ clauses])))
 
 (define-syntax (define-typed-syntax stx)
-  (syntax-parse stx
+  (syntax-parse stx #:datum-literals (⊢ :)
+    [(_ name:id #:export-as out-name:id
+        [pat
+         ;(~seq e-typed ≫ e-erased : τ_e)
+         clause-content ...
+         ⊢ e : τ]
+        stx-parse-clause ...)
+     #`(begin
+         (provide (rename-out [name out-name]))
+         (define-syntax (name syntx)
+           (syntax-parameterize ([stx (syntax-id-rules () [_ syntx])])
+             (syntax-parse syntx
+               [pat
+                #,@(process-clauses #'(clause-content ...))
+                ;#:with [e-erased τ_e] (infer+erase (syntax e-typed))
+                ;clause-content ...
+                (assign-type (syntax e) (syntax τ))]
+               stx-parse-clause ...))))]
     [(_ name:id #:export-as out-name:id stx-parse-clause ...)
      #'(begin
          (provide (rename-out [name out-name]))
