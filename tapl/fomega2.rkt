@@ -1,6 +1,7 @@
 #lang s-exp "typecheck.rkt"
-(extends "sysf.rkt" #:except #%datum ∀ Λ inst);#:rename [~∀ ~sysf:∀])
+(extends "sysf.rkt" #:except #%datum ∀ Λ inst #:rename [~∀ ~sysf:∀])
 (reuse String #%datum #:from "stlc+reco+var.rkt")
+(provide ★)
 
 ; same as fomega.rkt except here λ and #%app works as both type and terms
 ; - uses definition from stlc, but tweaks type? and kind? predicates
@@ -37,9 +38,16 @@
      #:with (τ- k_τ) (infer+erase #'τ)
      #'(define-syntax alias (syntax-parser [x:id #'τ-][(_ . rst) #'(τ- . rst)]))]))
 
-(define-base-kind ★)
+(define-syntax ★ (make-rename-transformer #'#%type))
+(define-for-syntax ★? #%type?)
 (define-kind-constructor ∀★ #:arity >= 0)
-(define-type-constructor ∀ #:bvs >= 0 #:arr ∀★)
+
+(define-typed-syntax ∀ #:export-as ∀
+  [(_ bvs:kind-ctx τ_body)
+   ;; cant re-use the expansion in sysf:∀ because it will give the bvs kind #%type
+   #:with (tvs- τ_body- k_body) (infer/ctx+erase #'bvs #'τ_body)
+   ; expand so kind gets overwritten
+   (⊢ #,((current-type-eval) #'(sysf:∀ tvs- τ_body-)) : (∀★ bvs.kind ...))])
 
 ;; alternative: normalize before type=?
 ; but then also need to normalize in current-promote
@@ -63,19 +71,29 @@
   (define old-eval (current-type-eval))
   (define (type-eval τ) (normalize (old-eval τ)))
   (current-type-eval type-eval)
-  
-  (define old-type=? (current-type=?))
-  (define (type=? t1 t2)
-    (or (and (★? t1) (#%type? t2))
-        (and (#%type? t1) (★? t2))
-        (and (syntax-parse (list t1 t2) #:datum-literals (:)
-               [((~∀ ([tv1 : k1]) tbody1)
-                 (~∀ ([tv2 : k2]) tbody2))
-                ((current-type=?) #'k1 #'k2)]
-               [_ #t])
-             (old-type=? t1 t2))))
-  (current-type=? type=?)
-  (current-typecheck-relation (current-type=?)))
+  )
+
+(begin-for-syntax
+  (define-syntax ~∀
+    (pattern-expander
+     (syntax-parser #:datum-literals (:)
+       [(_ . args)
+        #:with ∀τ (generate-temporary)
+        #'(~and ∀τ
+                (~parse (~sysf:∀ (tv (... ...)) τ) #'∀τ)
+                (~parse (~∀★ k (... ...)) (typeof #'∀τ))
+                (~parse args #'(([tv k] (... ...)) (τ))))])))
+  (define-syntax ~∀*
+    (pattern-expander
+     (syntax-parser #:datum-literals (<:)
+       [(_ . args)
+        #'(~or
+           (~∀ . args)
+           (~and any (~do
+                      (type-error
+                       #:src #'any
+                       #:msg "Expected ∀ type, got: ~a" #'any))))])))
+  )
 
 (define-typed-syntax Λ
   [(_ bvs:kind-ctx e)

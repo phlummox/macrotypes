@@ -1,7 +1,7 @@
 #lang racket/base
 (require
-  (for-syntax (except-in racket extends) (only-in srfi/13 string-prefix?)
-              syntax/parse racket/syntax syntax/stx racket/stxparam
+  (for-syntax (except-in racket extends string-prefix?) (only-in srfi/13 string-prefix?)
+              syntax/parse racket/syntax syntax/stx racket/stxparam seq-no-order
               "stx-utils.rkt"
               syntax/parse/debug)
   (for-meta 2 racket/base syntax/parse racket/syntax syntax/stx "stx-utils.rkt")
@@ -271,17 +271,56 @@
     (syntax-parse (infer (list e) #:tvctx ctx)
       [(tvs _ (e+) (τ)) (list #'tvs #'e+ #'τ)]))
 
-  ; extra indirection, enables easily overriding type=? with sub?
-  ; to add subtyping, without changing any other definitions
-  ; - must be here (instead of stlc) due to rackunit-typechecking
-  (define current-typecheck-relation (make-parameter #f))
+  ;; type-equal? : Type Type -> Boolean
+  ;; Two types are equivalent when structurally free-identifier=?
+  ;; - assumes canonical (ie expanded) representation
+  (define (type-equal? t1 t2)
+    (type-equal?/recur t1 t2 type-equal?))
 
-  ;; convenience fns for current-typecheck-relation
+  ;; type-equal?/recur : Type Type (Type Type -> Boolean) -> Boolean
+  ;; Detirmines whether two types are structurally equal, using rec for sub-pieces
+  (define (type-equal?/recur t1 t2 rec)
+    ;(printf "(τ=) t1 = ~a\n" #;τ1 (syntax->datum t1))
+    ;(printf "(τ=) t2 = ~a\n" #;τ2 (syntax->datum t2))
+    (or (and (identifier? t1) (identifier? t2) (free-identifier=? t1 t2))
+        (and (stx-null? t1) (stx-null? t2))
+        (let ([t1 (syntax->list t1)] [t2 (syntax->list t2)])
+          (and t1 t2
+               (= (length t1) (length t2))
+               (andmap rec t1 t2)))))
+  
+  ;; typecheck? : Type Type -> Boolean
+  ;; Determines whether a value of type t1 can be used as a value of type t2
+  ;; For languages with subtyping, this is determines whether t1 is a subtype of t2
+  ;; This uses a syntax property attached to the type, so that types can determine
+  ;; their own subtyping relations. 
   (define (typecheck? t1 t2)
-    ((current-typecheck-relation) t1 t2))
+    (let* ([t1 ((current-promote) t1)] [k1 (typeof t1)] [k2 (typeof t2)])
+      (and (or (and (not k1) (not k2))
+               (and k1 k2 (typecheck? k1 k2)))
+           (or (type-equal?/recur t1 t2 type=?)
+               (and (get-sub t1)
+                    ((get-sub t1) t1 t2))))))
+
+  ;; typechecks? : (Stx-Listof Type) (Stx-Listof Type) -> Boolean
+  ;; Like typecheck?, but over a list or syntax-list of types
   (define (typechecks? τs1 τs2)
     (and (= (stx-length τs1) (stx-length τs2))
          (stx-andmap typecheck? τs1 τs2)))
+
+  ;; type=? : Type Type -> Boolean
+  ;; Determines whether two types are logically equivalent.
+  (define (type=? t1 t2)
+    (or (type-equal?/recur t1 t2 type=?)
+        (and (typecheck? t1 t2)
+             (typecheck? t2 t1))))
+
+  ;; types=? : (Stx-Listof Type) (Stx-Listof Type) -> Boolean
+  ;; Like type=?, but over a list or syntax-list of types
+  (define (types=? t1s t2s)
+    (let ([t1s (syntax->list t1s)] [t2s (syntax->list t2s)])
+      (and (= (length t1s) (length t2s))
+           (andmap type=? t1s t2s))))
   
   (define current-type-eval (make-parameter #f))
   (define (type-evals τs) #`#,(stx-map (current-type-eval) τs))
@@ -314,6 +353,10 @@
       (current-continuation-marks)))))
 
 (begin-for-syntax
+  (define (add-sub stx sub?)
+    (syntax-property stx 'sub? sub?))
+  (define (get-sub stx)
+    (syntax-property stx 'sub?))
   ; surface type syntax is saved as the value of the 'orig property
   ; used to report error msgs
   (define (add-orig stx orig)
@@ -339,7 +382,10 @@
 
 (define-syntax define-basic-checked-id-stx
   (syntax-parser #:datum-literals (:)
-    [(_ τ:id : kind)
+    [(_ τ:id : kind
+        (~optional
+         (~seq #:sub? sub?-proc)
+         #:defaults ([sub?-proc #'(λ (this other) #f)])))
      #:with #%tag (format-id #'kind "#%~a" #'kind)
      #:with τ? (mk-? #'τ)
      #:with τ-internal (generate-temporary #'τ)
@@ -359,6 +405,7 @@
                  (syntax-source e) (syntax-line e) (syntax-column e)
                  (syntax->datum e) (type->str #'τ) (type->str #'e_τ))
                 #'e-]))
+           (define τ-sub? sub?-proc)
            (define-syntax τ-expander
              (pattern-expander
               (syntax-parser
@@ -373,21 +420,27 @@
          (define-syntax τ
            (syntax-parser
              ;[(~var _ id) (add-orig (assign-type #'τ-internal #'kind) #'τ)])))]))
-             [(~var _ id) (add-orig (assign-type #'(τ-internal) #'#%tag) #'τ)])))]))
+             [(~var _ id)
+              (add-sub (add-orig (assign-type #'(τ-internal) #'#%tag) #'τ) τ-sub?)])))]))
 
 ; I use identifiers "τ" and "kind" but this form is not restricted to them.
 ; E.g., τ can be #'★ and kind can be #'#%kind (★'s type)
 (define-syntax (define-basic-checked-stx stx)
   (syntax-parse stx #:datum-literals (:)
     [(_ τ:id : kind
-        (~optional
-         (~seq #:arity op n:exact-nonnegative-integer)
-         #:defaults ([op #'=] [n #'1]))
-        (~optional
-         (~seq #:bvs (~and (~parse has-bvs? #'#t) bvs-op) bvs-n:exact-nonnegative-integer)
-         #:defaults ([bvs-op #'=][bvs-n #'0]))
-        (~optional (~seq #:arr (~and (~parse has-annotations? #'#t) tycon))
-         #:defaults ([tycon #'void])))
+        (~seq-no-order
+         (~optional
+          (~seq #:sub? sub?-proc)
+          #:defaults ([sub?-proc #'(λ (this other) #f)]))
+         (~optional
+          (~seq #:arity op n:exact-nonnegative-integer)
+          #:defaults ([op #'=] [n #'1]))
+         (~optional
+          (~seq #:bvs (~and (~parse has-bvs? #'#t) bvs-op) bvs-n:exact-nonnegative-integer)
+          #:defaults ([bvs-op #'=][bvs-n #'0]))
+         (~optional
+          (~seq #:arr (~and (~parse has-annotations? #'#t) tycon))
+          #:defaults ([tycon #'void]))))
      #:with #%kind (format-id #'kind "#%~a" #'kind)
      #:with τ-internal (generate-temporary #'τ)
      #:with τ? (mk-? #'τ)
@@ -431,6 +484,8 @@
                                   #:msg
                                   "Expected ~a type, got: ~a"
                                   #'τ #'any))))])))
+           (define τ-sub? sub?-proc)
+           
            (define (τ? t)
              (and (stx-pair? t)
                   (syntax-parse t
@@ -466,7 +521,7 @@
                #:with k_result (if #,(attribute has-annotations?)
                                    #'(tycon k_arg (... ...))
                                    #'#%kind)
-               (assign-type #'(τ-internal (λ bvs- void . τs-)) #'k_result)]
+               (add-sub (assign-type #'(τ-internal (λ bvs- void . τs-)) #'k_result) τ-sub?)]
              ;; else fail with err msg
              [_
               (type-error #:src stx
@@ -491,9 +546,6 @@
      #:with define-base-name (format-id #'name "define-base-~a" #'name)
      #:with define-name-cons (format-id #'name "define-~a-constructor" #'name)
      #:with name-ann (format-id #'name "~a-ann" #'name)
-     #:with name=? (format-id #'name "~a=?" #'name)
-     #:with names=? (format-id #'names "~a=?" #'names)
-     #:with current-name=? (format-id #'name=? "current-~a" #'name=?)
      #:with same-names? (format-id #'name "same-~as?" #'name)
      #'(begin
          (provide (for-syntax current-is-name? is-name? #%tag? mk-name name name-bind name-ann name-ctx same-names?)
@@ -533,7 +585,7 @@
              (pattern stx
                       #:when (stx-pair? #'stx)
                       #:when (brace? #'stx)
-                      #:with ((~var t name)) #'stx
+                      #:with (~! (~var t name)) #'stx
                       #:attr norm (delay #'t.norm))
              (pattern any
                       #:fail-when #t
@@ -544,25 +596,13 @@
                         "where τ is a valid ~a.")
                        'name (type->str #'any) 'name))
                       #:attr norm #f))
-           (define (name=? t1 t2)
-             ;(printf "(τ=) t1 = ~a\n" #;τ1 (syntax->datum t1))
-             ;(printf "(τ=) t2 = ~a\n" #;τ2 (syntax->datum t2))
-             (or (and (identifier? t1) (identifier? t2) (free-identifier=? t1 t2))
-                 (and (stx-null? t1) (stx-null? t2))
-                 (and (stx-pair? t1) (stx-pair? t2)
-                      (names=? t1 t2))))
-           (define current-name=? (make-parameter name=?))
-           (current-typecheck-relation name=?)
-           (define (names=? τs1 τs2)
-             (and (stx-length=? τs1 τs2)
-                  (stx-andmap (current-name=?) τs1 τs2)))
            (define (same-names? τs)
              (define τs-lst (syntax->list τs))
              (or (null? τs-lst)
-                 (andmap (λ (τ) ((current-name=?) (car τs-lst) τ)) (cdr τs-lst)))))
+                 (andmap (λ (τ) (type=? (car τs-lst) τ)) (cdr τs-lst)))))
          (define-syntax define-base-name
            (syntax-parser
-             [(_ (~var x id)) #'(define-basic-checked-id-stx x : name)]))
+             [(_ (~var x id) . rst) #'(define-basic-checked-id-stx x : name . rst)]))
          (define-syntax define-name-cons
            (syntax-parser
              [(_ (~var x id) . rst)  #'(define-basic-checked-stx x : name . rst)])))]))

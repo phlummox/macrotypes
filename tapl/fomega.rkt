@@ -1,5 +1,5 @@
 #lang s-exp "typecheck.rkt"
-(extends "sysf.rkt" #:except #%datum ∀ Λ inst)
+(extends "sysf.rkt" #:except #%datum ∀ Λ inst #:rename [~∀ ~sysf:∀])
 (reuse String #%datum #:from "stlc+reco+var.rkt")
 
 ;; System F_omega
@@ -42,10 +42,22 @@
 (provide ★ (for-syntax ★?))
 (define-for-syntax ★? #%type?)
 (define-syntax ★ (make-rename-transformer #'#%type))
-(define-kind-constructor ⇒ #:arity >= 1)
+(define-kind-constructor ⇒ #:arity >= 1
+  #:sub? (λ (k1 k2)
+           (syntax-parse (list k1 k2)
+             [[(~⇒ in1 ... out1) (~⇒ in2 ... out2)]
+              (and (typecheck? #'out1 #'out2)
+                   (typechecks? #'(in2 ...) #'(in1 ...)))]
+             [_ #f])))
 (define-kind-constructor ∀★ #:arity >= 0)
 
-(define-type-constructor ∀ #:bvs >= 0 #:arr ∀★)
+(define-typed-syntax ∀ #:export-as ∀ #:datum-literals (:)
+  [(_ ([X : k] ...) body)
+   ;; cant re-use the expansion in sysf:∀ because it will give the bvs kind #%type
+   #:with (tvs- τ_body- k_body)
+   (infer/ctx+erase #'([X : k] ...) #'body)
+   ; expand so kind gets overwritten
+   (⊢ #,((current-type-eval) #'(sysf:∀ tvs- τ_body-)) : (∀★ k ...))])
 
 ;; alternative: normalize before type=?
 ; but then also need to normalize in current-promote
@@ -69,16 +81,21 @@
   (define old-eval (current-type-eval))
   (define (type-eval τ) (normalize (old-eval τ)))
   (current-type-eval type-eval)
-  
-  (define old-type=? (current-type=?))
-  ; ty=? == syntax eq and syntax prop eq
-  (define (type=? t1 t2)
-    (let ([k1 (typeof t1)][k2 (typeof t2)])
-      (and (or (and (not k1) (not k2))
-               (and k1 k2 ((current-type=?) k1 k2)))
-           (old-type=? t1 t2))))
-  (current-type=? type=?)
-  (current-typecheck-relation (current-type=?)))
+  )
+
+(begin-for-syntax
+  ;; needed so that (⇑ e as ∀) in inst works
+  (define-syntax ~∀
+    (pattern-expander
+     (syntax-parser
+       [(_ . id:id)
+        #:with ooo (quote-syntax ...)
+        #'(~and ∀τ
+                (~parse (~sysf:∀ (tv ooo) τ) #'∀τ)
+                (~parse (~∀★ k ooo) (typeof #'∀τ))
+                (~parse id #'(([tv k] ooo) (τ))))]
+       ))))
+
 
 (define-typed-syntax Λ
   [(_ bvs:kind-ctx e)

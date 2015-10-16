@@ -27,12 +27,7 @@
            (define sub (typeof t #:tag 'sub))
            (if sub (expose sub) t)]
           [else t]))
-  (current-promote expose)
-  (define stlc:sub? (current-sub?))
-  (define (sub? t1 t2)
-    (stlc:sub? ((current-promote) t1) t2))
-  (current-sub? sub?)
-  (current-typecheck-relation (current-sub?)))
+  (current-promote expose))
 
 ; quasi-kind, but must be type constructor because its arguments are types
 (define-type-constructor <: #:arity >= 0) 
@@ -52,10 +47,10 @@
   (define-syntax ~∀
     (pattern-expander
      (syntax-parser #:datum-literals (<:)
-       [(_ ([tv:id <: τ_sub] ...) τ)
+       [(_ ([tv:id <: τ_sub] (~and ooo (~literal ...))) τ)
         #'(~and ∀τ
-                (~parse (~sysf:∀ (tv ...) τ) #'∀τ)
-                (~parse (~<: τ_sub ...) (typeof #'∀τ)))]
+                (~parse (~sysf:∀ (tv ooo) τ) #'∀τ)
+                (~parse (~<: τ_sub ooo) (typeof #'∀τ)))]
        [(_ . args)
         #'(~and ∀τ
                 (~parse (~sysf:∀ (tv (... ...)) τ) #'∀τ)
@@ -83,7 +78,11 @@
    (⊢ e- : (∀ ([tv- <: τsub] ...) τ_e))])
 (define-typed-syntax inst
   [(_ e τ:type ...)
-   #:with (e- (([tv τ_sub] ...) τ_body)) (⇑ e as ∀)
-   #:when (typechecks? #'(τ.norm ...) #'(τ_sub ...))
+   #:with (e- (([tv τ_sub:type] ...) τ_body)) (⇑ e as ∀)
+   #:fail-unless (typechecks? #'(τ.norm ...) #'(τ_sub.norm ...))
+   (format "~a expects ~a as arguments, given: ~a"
+             (syntax->datum #'e)
+             (stx-map type->str #'(τ_sub.norm ...))
+             (stx-map type->str (syntax->list #'(τ.norm ...))))
    (⊢ e- : #,(substs #'(τ.norm ...) #'(tv ...) #'τ_body))])
 

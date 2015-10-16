@@ -21,7 +21,7 @@
 (define-syntax define-type-alias
   (syntax-parser
     [(_ alias:id τ:type)
-     #'(define-syntax alias (make-variable-like-transformer #'τ.norm) #;(syntax-parser [x:id #'τ.norm]))]))
+     #'(define-syntax alias (make-variable-like-transformer #'τ))]))
 
 (define-typed-syntax define
   [(_ x:id e)

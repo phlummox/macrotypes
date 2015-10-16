@@ -1,5 +1,6 @@
 #lang s-exp "typecheck.rkt"
 (extends "stlc+lit.rkt" #:except #%datum)
+(require (only-in "stlc+sub.rkt" Top?))
 (provide (for-syntax current-join))
  
 ;; Simply-Typed Lambda Calculus, plus extensions (TAPL ch11)
@@ -17,8 +18,8 @@
 ;; - ascription (ann)
 ;; - let, let*, letrec
 
-(define-base-type Bool)
-(define-base-type String)
+(define-base-type Bool #:sub? (λ (this other) (Top? other)))
+(define-base-type String #:sub? (λ (this other) (Top? other)))
 
 (define-typed-syntax #%datum
   [(_ . b:boolean) (⊢ (#%datum . b) : Bool)]
