@@ -322,11 +322,6 @@
           (x 1 0)))) (λ ([y : Int] [z : Int]) z))
  : Int ⇒ 0)
 
-;; --- disallow same-arity functions
-(typecheck-fail
- (λ ([x : (∪ (→ Int Int) (→ Str Str))]) 1)
- #:with-msg "Cannot discriminate")
-
 ;; -----------------------------------------------------------------------------
 ;; --- Filter with unions
 
@@ -375,7 +370,53 @@
   : (∪ Int Str) ⇒ "hi")
 
 ;; -----------------------------------------------------------------------------
-;; --- TODO CPS filters
+;; --- CPS filters
+
+(check-type (λ ([x : Int]) x)
+            : (∪ (→ Int Int) (→ Str Str)))
+
+(check-type
+ (λ ([x : (∪ (→ Int Str) (→ Str Str))])
+    (test ((→ Int Str) ? x)
+          (x 42)
+          (x "hello")))
+ : (→ (∪ (→ Int Str) (→ Str Str)) Str))
+
+(check-type-and-result
+ ((λ ([x : (∪ (→ Int Str) (→ Str Str))])
+    (test ((→ Int Str) ? x)
+          (x 42)
+          "booo")) (λ ([x : Int]) "int"))
+ : Str ⇒ "int")
+
+(check-type-and-result
+ ((λ ([x : (∪ (→ Int Str) (→ Str Str))])
+    (test ((→ Int Str) ? x)
+          (x 42)
+          "success")) (λ ([x : Str]) x))
+ : Str ⇒ "success")
+
+(check-type-and-result
+ ((λ ([x : (∪ (→ Boolean Num) (→ Int Num))])
+    (test ((→ Boolean Num) ? x)
+          (x #t)
+          (x 0))) (λ ([y : Int]) (+ y 42)))
+ : Num ⇒ 42)
+
+;; ;; PROBLEMOS (these are keeping the CPS filters out of the limelight)
+;; (check-type-and-result
+;;  ((λ ([x : (∪ (→ Int Str) (→ Str Str))])
+;;     (test ((→ Int Str) ? x)
+;;           (x 42)
+;;           "success")) (λ ([x : Str]) "uncaught type error"))
+;;  : Str ⇒ "success")
+
+;; (check-type-and-result
+;;  ((λ ([x : (∪ (→ Int Str) (→ Str Str))])
+;;     (test ((→ Int Str) ? x)
+;;           "uncaught type error"
+;;           "success")) (λ ([x : Str]) x))
+;;  : Str ⇒ "success")
 
 ;; -----------------------------------------------------------------------------
 ;; --- TODO Filter on values (should do nothing)

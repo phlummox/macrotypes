@@ -89,8 +89,8 @@
     ;; Private helper: check that all functions have unique arities
     ;; It's private because it assumes all τ* have been evaluated
     (let ([assert-unique-arity-arrows
-           (lambda (τ*)
-             (for/fold ([seen '()])
+           (lambda (τ*) (void)
+             #;(for/fold ([seen '()])
                        ([τ (in-list τ*)])
                (syntax-parse τ
                 [(~→ τ-dom* ... τ-cod)
@@ -125,7 +125,7 @@
           [(null? (cdr τ*))
            #`#,(car τ*)]
           [else
-           (assert-unique-arity-arrows τ*)
+           ;; (assert-unique-arity-arrows τ*)
            #`#,(cons #'∪ τ*)]))
        (τ-eval τ)]
       [_
@@ -211,10 +211,28 @@
      (error 'Π "Cannot make filter for type ~a\n" (syntax->datum τ))]))
   (current-Π simple-Π))
 
+;; Compile a function type to a "contract" that calls `escape` on error
+(define-syntax (type->contract stx)
+  (syntax-parse stx
+   [(_ unsafe-proc τ escape)
+    (syntax-parse (τ-eval #'τ)
+     [(~→ τ-dom* ... τ-cod)
+      (define pre* (map (current-Π) (syntax->list #'(τ-dom* ...))))
+      (define arg* (map (lambda (x) (gensym)) pre*))
+      (define post ((current-Π) #'τ-cod))
+      #`(lambda (#,@arg*)
+          (unless (for/and ([a (in-list (list #,@arg*))]
+                            [p (in-list (list #,@pre*))])
+                    (p a))
+            (escape 'caller))
+          (with-handlers* ([exn:fail:contract? (lambda (exn) (escape 'caller))])
+                          (let ([r (unsafe-proc #,@arg*)])
+                            (unless (#,post r)
+                              (escape 'callee))
+                            r)))]
+     [_ #'unsafe-proc])]))
+
 ;; (test (τ ? x) e1 e2)
-;; TODO:
-;; - check if τ0 is a union type
-;; - check if τ-filter is a subtype of τ0
 ;; - drop absurd branches?
 ;; - allow x not identifier (1. does nothing 2. latent filters)
 (define-typed-syntax test #:datum-literals (?)
@@ -225,11 +243,18 @@
      (format "Could not express type '~a' as a filter." #'τ-filter-stx)
    ;; TypeCheck e0:normally, e1:positive, e2:negative
    #:with (x τ0) (infer+erase #'x-stx)
-   #:with [x1 e1+ τ1] (infer/ctx+erase #'([x-stx : τ-filter]) #'e1)
+   #:with [(x1) e1+ τ1] (infer/ctx+erase #'([x-stx : τ-filter]) #'e1)
    #:with [x2 e2+ τ2] (infer/ctx+erase #`([x-stx : #,(∖ #'τ0 #'τ-filter)]) #'e2)
    ;; Expand to a conditional, using the runtime predicate
-   (⊢ (if (f x-stx)
-          ((lambda x1 e1+) x-stx)
-          ((lambda x2 e2+) x-stx))
+   (⊢ (let/ec success
+        (let ([else-f (lambda () ((lambda x2 e2+) x-stx))])
+          (if (f x-stx)
+              (begin
+                (let/ec err
+                  ((lambda (x1-unsafe)
+                     (let ([x1 (type->contract x1-unsafe τ-filter err)])
+                       (success e1+))) x-stx))
+                (else-f))
+              (else-f))))
       : (∪ τ1 τ2))])
 
