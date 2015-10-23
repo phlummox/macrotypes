@@ -5,11 +5,11 @@
 ;; basic types & syntax
 
 (check-type 1 : Int)
-(check-type #f : Boolean)
-(check-type "hello" : Str)
+(check-type #f : Bool)
+(check-type "hello" : String)
 (check-type 1 : Top)
-(check-type (λ ([x : (∪ Boolean Int)]) x)
-            : (→ (∪ Boolean Int) (∪ Boolean Int)))
+(check-type (λ ([x : (∪ Bool Int)]) x)
+            : (→ (∪ Bool Int) (∪ Bool Int)))
 
 (typecheck-fail
  (λ ([x : ∪]) x)
@@ -41,16 +41,16 @@
 
 (check-type (λ ([x : (∪ Int Int Int Int)]) x)
             : (→ Int Int))
-(check-type (λ ([x : (∪ Int Boolean)]) 42)
-            : (→ (∪ Boolean Int) Int))
-(check-type (λ ([x : (∪ Int Boolean Boolean Int)]) x)
-            : (→ (∪ Boolean Int) (∪ Boolean Int)))
-(check-type (λ ([x : (∪ (∪ Int Boolean))]) 42)
-            : (→ (∪ Int Boolean) Int))
-(check-type (λ ([x : (∪ Int Boolean)]) 42)
-            : (→ (∪ (∪ Int Boolean)) Int))
-(check-type (λ ([x : (∪ Int Boolean)]) 42)
-            : (→ (∪ (∪ Int Boolean) (∪ Int Boolean)) Int))
+(check-type (λ ([x : (∪ Int Bool)]) 42)
+            : (→ (∪ Bool Int) Int))
+(check-type (λ ([x : (∪ Int Bool Bool Int)]) x)
+            : (→ (∪ Bool Int) (∪ Bool Int)))
+(check-type (λ ([x : (∪ (∪ Int Bool))]) 42)
+            : (→ (∪ Int Bool) Int))
+(check-type (λ ([x : (∪ Int Bool)]) 42)
+            : (→ (∪ (∪ Int Bool)) Int))
+(check-type (λ ([x : (∪ Int Bool)]) 42)
+            : (→ (∪ (∪ Int Bool) (∪ Int Bool)) Int))
 
 
 ;; -----------------------------------------------------------------------------
@@ -62,42 +62,42 @@
 (check-type (λ ([x : Int]) x)
             : (→ Bot Top))
 
-(check-not-type 1 : (∪ Boolean))
+(check-not-type 1 : (∪ Bool))
 
 ;; - AMB : t <: t' => t <: (U ... t' ...)
-(check-type 1 : (∪ Boolean Int))
-(check-type -1 : (∪ Int Boolean))
-(check-type 1 : (∪ Boolean Int (→ Boolean Boolean)))
-(check-type 1 : (∪ (∪ Int Boolean) (∪ Int Boolean)))
+(check-type 1 : (∪ Bool Int))
+(check-type -1 : (∪ Int Bool))
+(check-type 1 : (∪ Bool Int (→ Bool Bool)))
+(check-type 1 : (∪ (∪ Int Bool) (∪ Int Bool)))
 
-(check-not-type 1 : (∪ Boolean (→ Int Int)))
+(check-not-type 1 : (∪ Bool (→ Int Int)))
 
 ;; --- EXT : (U t' ...) <: (U t t' ...)
-(check-type (λ ([x : (∪ Int Boolean)]) x)
-            : (→ (∪ Int Boolean) (∪ Int Boolean Str)))
-(check-type (λ ([x : (∪ Int Boolean)]) x)
-            : (→ (∪ Boolean) (∪ Int Boolean Str)))
+(check-type (λ ([x : (∪ Int Bool)]) x)
+            : (→ (∪ Int Bool) (∪ Int Bool String)))
+(check-type (λ ([x : (∪ Int Bool)]) x)
+            : (→ (∪ Bool) (∪ Int Bool String)))
 
-(check-not-type (λ ([x : (∪ Int Boolean)]) x)
-            : (→ (∪ Int Boolean) (∪ Int)))
-(check-not-type (λ ([x : (∪ Int Boolean)]) x)
-            : (→ (∪ Boolean Int Str) (∪ Int Boolean)))
+(check-not-type (λ ([x : (∪ Int Bool)]) x)
+            : (→ (∪ Int Bool) (∪ Int)))
+(check-not-type (λ ([x : (∪ Int Bool)]) x)
+            : (→ (∪ Bool Int String) (∪ Int Bool)))
 
 ;; --- SUB : a<:b => (U a t' ...) <: (U b t' ...)
-(check-type (λ ([x : (∪ Int Str)]) x)
-            : (→ (∪ Int Str) (∪ Num Str)))
-(check-type (λ ([x : (∪ Int Str)]) x)
-            : (→ (∪ Nat Str) (∪ Num Str)))
+(check-type (λ ([x : (∪ Int String)]) x)
+            : (→ (∪ Int String) (∪ Num String)))
+(check-type (λ ([x : (∪ Int String)]) x)
+            : (→ (∪ Nat String) (∪ Num String)))
 
-(check-type (λ ([x : (∪ Int Str)]) x)
-            : (→ (∪ Int Str) Top))
+(check-type (λ ([x : (∪ Int String)]) x)
+            : (→ (∪ Int String) Top))
 
-(check-not-type (λ ([x : (∪ Int Str)]) x)
-            : (→ Top (∪ Num Str)))
+(check-not-type (λ ([x : (∪ Int String)]) x)
+            : (→ Top (∪ Num String)))
 
 ;; --- ALL
-(check-type (λ ([x : (∪ Boolean Int Str)]) x)
-            : (→ (∪ Boolean Int Str) Top))
+(check-type (λ ([x : (∪ Bool Int String)]) x)
+            : (→ (∪ Bool Int String) Top))
 (check-type (λ ([x : (∪ Nat Int Num)]) x)
             : (→ (∪ Nat Int Num) Num))
 (check-type (λ ([x : (∪ Nat Int Num)]) x)
@@ -106,52 +106,52 @@
 ;; --- misc
 ;; Because Int<:(U Int ...)
 (check-type (λ ([x : (∪ Int Nat)]) #t)
-                  : (→ Int Boolean))
+                  : (→ Int Bool))
 
 ;; -----------------------------------------------------------------------------
 ;; --- Basic Filters (applying functions)
 
 ;; --- is-boolean?
 (check-type
- (λ ([x : (∪ Boolean Int)])
-    (test [Boolean ? x]
+ (λ ([x : (∪ Bool Int)])
+    (test [Bool ? x]
           #t
           #f))
- : (→ (∪ Boolean Int) Boolean))
+ : (→ (∪ Bool Int) Bool))
 (check-type-and-result
- ((λ ([x : (∪ Boolean Int)])
-     (test (Boolean ? x)
+ ((λ ([x : (∪ Bool Int)])
+     (test (Bool ? x)
            #t
            #f)) #t)
-  : Boolean ⇒ #t)
+  : Bool ⇒ #t)
 (check-type-and-result
- ((λ ([x : (∪ Boolean Int)])
-     (test (Boolean ? x)
+ ((λ ([x : (∪ Bool Int)])
+     (test (Bool ? x)
            #t
            #f)) 902)
-  : Boolean ⇒ #f)
+  : Bool ⇒ #f)
 
 ;; --- successor
 (check-type
- (λ ([x : (∪ Int Boolean)])
+ (λ ([x : (∪ Int Bool)])
     (test (Int ? x)
           (+ 1 x)
           0))
- : (→ (∪ Int Boolean) (∪ Num Nat)))
+ : (→ (∪ Int Bool) (∪ Num Nat)))
 (check-type-and-result
- ((λ ([x : (∪ Int Boolean)])
+ ((λ ([x : (∪ Int Bool)])
     (test (Int ? x)
           (+ 1 x)
           0)) #f)
  : Num ⇒ 0)
 (check-type-and-result
- ((λ ([x : (∪ Int Boolean)])
+ ((λ ([x : (∪ Int Bool)])
     (test (Int ? x)
           (+ 1 x)
           1)) #t)
  : Num ⇒ 1)
 (check-type-and-result
- ((λ ([x : (∪ Int Boolean)])
+ ((λ ([x : (∪ Int Bool)])
     (test (Int ? x)
           (+ 1 x)
           0)) 9000)
@@ -161,81 +161,81 @@
 (check-type
  (λ ([x : Int])
     (test (Int ? x) #t #f))
- : (→ Int Boolean))
+ : (→ Int Bool))
 (check-type
  (λ ([x : Int])
-    (test (Boolean ? x) 0 x))
+    (test (Bool ? x) 0 x))
  : (→ Int (∪ Nat Int)))
 
 ;; --- Filter a subtype
 (check-type
- (λ ([x : (∪ Nat Boolean)])
+ (λ ([x : (∪ Nat Bool)])
     (test (Int ? x)
           x
           x))
- : (→ (∪ Nat Boolean) (∪ Int (∪ Nat Boolean))))
+ : (→ (∪ Nat Bool) (∪ Int (∪ Nat Bool))))
 
 (check-type
- (λ ([x : (∪ Int Boolean)])
+ (λ ([x : (∪ Int Bool)])
     (test (Nat ? x)
           x
           x))
- : (→ (∪ Boolean Int) (∪ Int Nat Boolean)))
+ : (→ (∪ Bool Int) (∪ Int Nat Bool)))
 
 ;; --- Filter a supertype
 (check-type
- (λ ([x : (∪ Int Boolean)])
+ (λ ([x : (∪ Int Bool)])
     (test (Num ? x)
           1
           x))
- : (→ (∪ Boolean Int) (∪ Nat Boolean)))
+ : (→ (∪ Bool Int) (∪ Nat Bool)))
 
 (check-type-and-result
- ((λ ([x : (∪ Int Boolean)])
+ ((λ ([x : (∪ Int Bool)])
      (test (Num ? x)
            #f
            x)) #t)
- : Boolean
+ : Bool
  ⇒ #t)
 
 ;; Should filter all the impossible types 
 (check-type-and-result
- ((λ ([x : (∪ Nat Int Num Boolean)])
+ ((λ ([x : (∪ Nat Int Num Bool)])
      (test (Num ? x)
            #f
            x)) #t)
- : Boolean
+ : Bool
  ⇒ #t)
 
 ;; Can refine non-union types
 (check-type-and-result
  ((λ ([x : Top])
-    (test (Str ? x)
+    (test (String ? x)
           x
           "nope"))
   "yes")
- : Str ⇒ "yes")
+ : String ⇒ "yes")
 
 ;; ----------------------------------------------------------------------------- 
 ;; --- misc subtyping + filters (regression tests)
 (check-type
- (λ ([x : (∪ Int Boolean)])
+ (λ ([x : (∪ Int Bool)])
     (test (Int ? x)
           0
           1))
- : (→ (∪ Int Boolean) Nat))
+ : (→ (∪ Int Bool) Nat))
 (check-type
- (λ ([x : (∪ Int Boolean)])
+ (λ ([x : (∪ Int Bool)])
     (test (Int ? x)
           0
           1))
- : (→ (∪ Int Boolean) Int))
+ : (→ (∪ Int Bool) Int))
 
 ;; -----------------------------------------------------------------------------
 ;; --- Invalid filters
 
 (typecheck-fail
- (λ ([x : (∪ Int Boolean)])
+ (λ ([x : (∪ Int Bool)])
     (test (1 ? x) #t #f))
  #:with-msg "not a valid type")
 (typecheck-fail
@@ -252,8 +252,8 @@
 ;; --- Subtypes should not be collapsed
 
 (check-not-type (λ ([x : (∪ Int Nat)]) #t)
-                : (→ Num Boolean))
-(check-type ((λ ([x : (∪ Int Nat Boolean)])
+                : (→ Num Bool))
+(check-type ((λ ([x : (∪ Int Nat Bool)])
                 (test (Int ? x)
                       2
                       (test (Nat ? x)
@@ -281,11 +281,11 @@
 ;; -----------------------------------------------------------------------------
 ;; --- Functions in union
 
-(check-type (λ ([x : (∪ Int (∪ Nat) (∪ (→ Int Str Int)) (→ (→ (→ Int Int)) Int))]) #t)
-            : (→ (∪ Int Nat (→ Int Str Int) (→ (→ (→ Int Int)) Int)) Boolean))
+(check-type (λ ([x : (∪ Int (∪ Nat) (∪ (→ Int String Int)) (→ (→ (→ Int Int)) Int))]) #t)
+            : (→ (∪ Int Nat (→ Int String Int) (→ (→ (→ Int Int)) Int)) Bool))
 
 (check-type (λ ([x : (∪ Int (→ Int Int))]) #t)
-            : (→ Int Boolean))
+            : (→ Int Bool))
 
 ;; --- filter functions
 (check-type
@@ -333,55 +333,55 @@
 
 ;; --- disallow same-arity functions
 (typecheck-fail
- (λ ([x : (∪ (→ Int Int) (→ Str Str))]) 1)
+ (λ ([x : (∪ (→ Int Int) (→ String String))]) 1)
  #:with-msg "Cannot discriminate")
 
 ;; -----------------------------------------------------------------------------
 ;; --- Filter with unions
 
 (check-type
- (λ ([x : (∪ Int Str)])
-  (test ((∪ Int Str) ? x)
+ (λ ([x : (∪ Int String)])
+  (test ((∪ Int String) ? x)
         x
         "nope"))
- : (→ (∪ Int Str) (∪ Int Str)))
+ : (→ (∪ Int String) (∪ Int String)))
 
 (check-type
- (λ ([x : (∪ Int Str Boolean)])
-    (test ((∪ Int Str) ? x)
+ (λ ([x : (∪ Int String Bool)])
+    (test ((∪ Int String) ? x)
           x
           "Nope"))
- : (→ (∪ Int Str Boolean) (∪ Int Str)))
+ : (→ (∪ Int String Bool) (∪ Int String)))
 
 (check-type
- (λ ([x : (∪ Int Str Boolean)])
-    (test ((∪ Int Str) ? x)
-          (test (Str ? x)
+ (λ ([x : (∪ Int String Bool)])
+    (test ((∪ Int String) ? x)
+          (test (String ? x)
                 "yes"
                 "int")
           "bool"))
- : (→ (∪ Int Str Boolean) Str))
+ : (→ (∪ Int String Bool) String))
 
 (check-type-and-result
- ((λ ([x : (∪ Str Boolean)])
+ ((λ ([x : (∪ String Bool)])
      (test ((∪ Int Nat Num) ? x)
            x
            (+ 1 2))) "hi")
  : Num ⇒ 3)
 
 (check-type-and-result
-  ((λ ([x : (∪ Str Int Boolean)])
-      (test ((∪ Int Str) ? x)
+  ((λ ([x : (∪ String Int Bool)])
+      (test ((∪ Int String) ? x)
             x
             "error")) 1)
-  : (∪ Str Int) ⇒ 1)
+  : (∪ String Int) ⇒ 1)
 
 (check-type-and-result
-  ((λ ([x : (∪ Str Int Boolean)])
-      (test ((∪ Int Str) ? x)
+  ((λ ([x : (∪ String Int Bool)])
+      (test ((∪ Int String) ? x)
             x
             "error")) "hi")
-  : (∪ Int Str) ⇒ "hi")
+  : (∪ Int String) ⇒ "hi")
 
 ;; -----------------------------------------------------------------------------
 ;; --- Subtyping products
@@ -392,10 +392,10 @@
 (check-type (tup 1) : (× Top))
 (check-type (tup 1) : Top)
 
-(check-not-type (tup 1) : Boolean)
-(check-not-type (tup 1) : Str)
-(check-not-type (tup 1) : (× Str))
-(check-not-type (tup 1) : (× Int Str))
+(check-not-type (tup 1) : Bool)
+(check-not-type (tup 1) : String)
+(check-not-type (tup 1) : (× String))
+(check-not-type (tup 1) : (× Int String))
 (check-not-type (tup 1) : Bot)
 
 (check-type (tup 1 2 3) : (× Int Nat Num))
@@ -403,28 +403,28 @@
 (check-type (tup 1 2 3) : (× Top Top Num))
 (check-type (tup 1 "2" 3) : (× Int Top Int))
 
-(check-not-type (tup 1 2 3) : (× Nat Nat Str))
+(check-not-type (tup 1 2 3) : (× Nat Nat String))
 
 ;; -----------------------------------------------------------------------------
 ;; --- Latent filters (on products)
 
 (check-type
- (λ ([v : (× (∪ Int Str) Int)])
+ (λ ([v : (× (∪ Int String) Int)])
     (test (Int ? (proj v 0))
           (+ (proj v 0) (proj v 1))
           0))
- : (→ (× (∪ Int Str) Int) Num))
+ : (→ (× (∪ Int String) Int) Num))
 
 (check-type-and-result
- ((λ ([v : (× (∪ Int Str) Int)])
+ ((λ ([v : (× (∪ Int String) Int)])
     (test (Int ? (proj v 0))
           (+ (proj v 0) (proj v 1))
           0))
-  (tup ((λ ([x : (∪ Int Str)]) x) -2) -3))
+  (tup ((λ ([x : (∪ Int String)]) x) -2) -3))
  : Num ⇒ -5)
 
 (check-type-and-result
- ((λ ([v : (× (∪ Int Str) Int)])
+ ((λ ([v : (× (∪ Int String) Int)])
     (test (Int ? (proj v 0))
           (+ (proj v 0) (proj v 1))
           0))
@@ -457,7 +457,7 @@
  : Num ⇒ 6)
 
 (check-type-and-result
- ((λ ([x : (∪ Int (× Str Nat) (× Int Int Int))])
+ ((λ ([x : (∪ Int (× String Nat) (× Int Int Int))])
      (test (Int ? x)
            (+ 1 x)
      (test ((× Int Int Int) ? x)
@@ -467,7 +467,7 @@
  : Num ⇒ 6)
 
 (check-type-and-result
- ((λ ([x : (∪ Int (× Str Nat) (× Int Int Int))])
+ ((λ ([x : (∪ Int (× String Nat) (× Int Int Int))])
      (test (Int ? x)
            (+ 1 x)
      (test ((× Int Int Int) ? x)
@@ -479,38 +479,38 @@
 ;; -- All together now
 
 (check-type-and-result
- ((λ ([x : (∪ Int (× Boolean Boolean) (× Int (∪ Str Int)))])
+ ((λ ([x : (∪ Int (× Bool Bool) (× Int (∪ String Int)))])
      (test (Int ? x)
            "just an int"
-     (test ((× Boolean Boolean) ? x)
+     (test ((× Bool Bool) ? x)
            "pair of bools"
-           (test (Str ? (proj x 1))
+           (test (String ? (proj x 1))
                  (proj x 1)
                  "pair of ints"))))
   (tup 33 "success"))
- : Str ⇒ "success")
+ : String ⇒ "success")
 
 (check-type-and-result
- ((λ ([x : (∪ Int (× Int Int) (× Int (∪ Str Int)))])
+ ((λ ([x : (∪ Int (× Int Int) (× Int (∪ String Int)))])
      (test (Int ? x)
            "just an int"
      (test ((× Int Int) ? x)
            "pair of ints"
-           (test (Str ? (proj x 1))
+           (test (String ? (proj x 1))
                  (proj x 1)
                  "another pair of ints"))))
   (tup 33 "success"))
- : Str ⇒ "success")
+ : String ⇒ "success")
 
 ;; -----------------------------------------------------------------------------
 ;; --- Filter lists
 
 (check-type
- (λ ([x : (List (∪ Int Str))])
-    (test ((List Str) ? x)
+ (λ ([x : (List (∪ Int String))])
+    (test ((List String) ? x)
           x
           #f))
- : (→ (List (∪ Int Str)) (∪ Boolean (List Str))))
+ : (→ (List (∪ Int String)) (∪ Bool (List String))))
 
 ;; -- -subtyping lists
 (check-type
@@ -518,18 +518,18 @@
  : (List Int))
 
 (check-type
- ((λ ([filter/3 : (→ (List (∪ Int Str)) (List Int))]
+ ((λ ([filter/3 : (→ (List (∪ Int String)) (List Int))]
       [add*/3 : (→ Num (List Num) (List Num))]
-      [xs : (×  (∪ Int Str) (∪ Int Str) (∪ Int Str))])
+      [xs : (×  (∪ Int String) (∪ Int String) (∪ Int String))])
      (add*/3 5 (filter/3 (cons (proj xs 0)
                                (cons (proj xs 1)
                                      (cons (proj xs 2)
-                                           (nil {(∪ Str Int)})))))))
+                                           (nil {(∪ String Int)})))))))
   ;; filter (okay this is a little tricky for recursion)
-  (λ ([xs : (List (∪ Int Str))])
-     ((λ ([v1 : (∪ Int Str)]
-          [v2 : (∪ Int Str)]
-          [v3 : (∪ Int Str)])
+  (λ ([xs : (List (∪ Int String))])
+     ((λ ([v1 : (∪ Int String)]
+          [v2 : (∪ Int String)]
+          [v3 : (∪ Int String)])
          (test (Int ? v1)
                (cons v1 (test (Int ? v2)
                               (cons v2 (test (Int ? v3)
@@ -569,16 +569,16 @@
 
 ;; -- Example 2
 (check-type
- (λ ([x : (∪ Str Num)]
-     [str-length : (→ Str Num)])
+ (λ ([x : (∪ String Num)]
+     [str-length : (→ String Num)])
     (test (Num ? x)
           (+ 1 x)
           (str-length x)))
- : (→ (∪ Str Num) (→ Str Num) Num))
+ : (→ (∪ String Num) (→ String Num) Num))
 
 ;; -- TODO Example 3 (requires IF)
 ;; (check-type
-;;  (λ ([member : (→ Num (List Num) Boolean)])
+;;  (λ ([member : (→ Num (List Num) Bool)])
 ;;     (λ ([x : Num] [l : (List Num)])
 ;;        (if (member x l)
 ;;            <compute with x>
@@ -587,21 +587,21 @@
 
 ;; -- Example 4
 (check-type
- (λ ([x : (∪ Num Str Top)] [f : (→ (∪ Num Str) Num)])
-    (test ((∪ Num Str) ? x)
+ (λ ([x : (∪ Num String Top)] [f : (→ (∪ Num String) Num)])
+    (test ((∪ Num String) ? x)
           (f x)
           0))
- : (→ (∪ Num Str Top) (→ (∪ Num Str) Num) Num))
+ : (→ (∪ Num String Top) (→ (∪ Num String) Num) Num))
 
 ;; Exmample 10 (we don't allow non-homogenous lists, so need to select head before filtering)
 (check-type
- (λ ([p : (List (∪ Nat Str))])
-    ((λ ([x : (∪ Nat Str)])
+ (λ ([p : (List (∪ Nat String))])
+    ((λ ([x : (∪ Nat String)])
        (test (Num ? x)
              (+ 1 x)
              7))
     (head p)))
- : (→ (List (∪ Nat Str)) Num))
+ : (→ (List (∪ Nat String)) Num))
 
 ;; -----------------------------------------------------------------------------
 ;; --- TODO CPS filters
@@ -611,7 +611,7 @@
 
 ;; (check-type
 ;;  (test (Int ? 1) #t #f)
-;;  : Boolean)
+;;  : Bool)
 
 ;; -----------------------------------------------------------------------------
 ;; --- TODO Values as filters (check equality)

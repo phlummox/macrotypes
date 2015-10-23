@@ -1,7 +1,7 @@
 #lang s-exp "typecheck.rkt"
-(extends "stlc+sub.rkt" #:except #%datum)
 (extends "stlc+cons.rkt" #:except + #%datum and tup × proj ~×)
 (reuse tup × proj ~× #:from "stlc+tup.rkt")
+(extends "stlc+sub.rkt")
 
 ;; Calculus for occurrence typing.
 ;; - Types can be simple, or sets of simple types
@@ -19,15 +19,6 @@
 ;; -- ONE : a<:b => (U a t' ...) <: (U b t' ...)
 
 ;; =============================================================================
-
-(define-base-type Bot) ;; For empty unions
-(define-base-type Boolean)
-(define-base-type Str)
-
-(define-typed-syntax #%datum
-  [(_ . n:boolean) (⊢ (#%datum . n) : Boolean)]
-  [(_ . n:str) (⊢ (#%datum . n) : Str)]
-  [(_ . x) #'(stlc+sub:#%datum . x)])
 
 (define-type-constructor ∪ #:arity >= 1)
 
@@ -203,11 +194,11 @@
 
   (define (simple-Π τ)
     (syntax-parse (τ-eval τ)
-     [~Boolean
+     [~Bool
       #'boolean?]
      [~Int
       #'integer?]
-     [~Str
+     [~String
       #'string?]
      [~Num
       #'number?]

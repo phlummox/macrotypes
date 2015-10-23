@@ -1,20 +1,9 @@
 #lang s-exp "typecheck.rkt"
 (reuse List cons nil #:from "stlc+cons.rkt")
-(reuse #:from "stlc+rec-iso.rkt") ; to load current-type=?
-(extends "stlc+sub.rkt" #:except #%datum)
+;; (reuse #:from "stlc+rec-iso.rkt") ; to load current-type=?
+(extends "stlc+sub.rkt")
 
 ;; Revision of overloading, using identifier macros instead of overriding #%app
-
-;; =============================================================================
-
-(define-base-type Bot)
-(define-base-type Str)
-
-(define-typed-syntax #%datum
-  [(_ . n:str) (⊢ (#%datum . n) : Str)]
-  [(_ . x) #'(stlc+sub:#%datum . x)])
-
-(define-for-syntax xerox syntax->datum)
 
 ;; =============================================================================
 ;; === Resolvers
@@ -25,17 +14,7 @@
    dom* ;; (Box (Listof (Pairof Type Expr)))
    cod  ;; Type
  ) #:constructor-name make-ℜ
-   #:transparent
-   #:property prop:procedure
-   (lambda (self τ-or-e #:exact? [exact? #f])
-     (define r
-       (if (syntax? τ-or-e) ;; Can I ask "type?"
-           (ℜ-resolve-syntax self τ-or-e #:exact? exact?)
-           (ℜ-resolve-value  self τ-or-e #:exact? exact?)))
-     (or r
-         (error 'ℜ (format "Resolution for '~a' failed at type ~a"
-                           (syntax->datum (ℜ-name self))
-                           τ-or-e))))
+;   #:prefab
  )
 
  ;; Rad!
@@ -53,6 +32,16 @@
    (define (τ=? τ2)
      (=? τ τ2))
    (assf τ=? (unbox (ℜ-dom* ℜ))))
+
+ (define (ℜ-resolve ℜ τ-or-e #:exact? [exact? #f])
+   (define r
+     (if (syntax? τ-or-e) ;; Can I ask "type?"
+         (ℜ-resolve-syntax ℜ τ-or-e #:exact? exact?)
+         (ℜ-resolve-value  ℜ τ-or-e #:exact? exact?)))
+   (or r
+       (error 'ℜ (format "Resolution for '~a' failed at type ~a"
+                         (syntax->datum (ℜ-name ℜ))
+                         τ-or-e))))
 
  (define (ℜ-resolve-syntax ℜ τ #:exact? [exact? #f])
    ;; First try exact matches, then fall back to subtyping (unless 'exact?' is set).
@@ -114,14 +103,14 @@
           #'(quote #,ℜ)] ;; Is there a way to transmit ℜ directly?
          [(n e)
           #:with [e+ τ+] (infer+erase #'e)
-          #:with n+ (#,ℜ #'τ+)
+          #:with n+ (ℜ-resolve #,ℜ #'τ+)
           (⊢ (#%app n+ e+)
              : τ-cod)]
          [(_ e* (... ...))
           #'(raise-arity-error (syntax->datum name) 1 e* (... ...))]))
       : Bot)]
   [(_ e* ...)
-   (error 'signature (format "Expected (signature (NAME VAR) (→ VAR τ)), got ~a" (xerox #'(e* ...))))])
+   (error 'signature (format "Expected (signature (NAME VAR) (→ VAR τ)), got ~a" (syntax->datum #'(e* ...))))])
 
 (define-typed-syntax resolve/tc #:export-as resolve
   [(_ name:id τ)
@@ -129,7 +118,8 @@
    ;; Extract a resolver from the syntax object
    (define ℜ (syntax->ℜ #'name))
    ;; Apply the resolver to the argument type. woo-wee!
-   (⊢ #,(ℜ #'τ+ #:exact? #t) : #,(ℜ->type ℜ #:subst #'τ+))])
+   (define e (ℜ-resolve ℜ #'τ+ #:exact? #t))
+   (⊢ #,e : #,(ℜ->type ℜ #:subst #'τ+))])
 
 (define-typed-syntax instance
   [(_ (name:id τ-stx) e)
@@ -160,5 +150,4 @@
    (⊢ (void) : Bot)]
   [_
    (error 'instance "Expected (instance (id τ) e).")])
-       
    
