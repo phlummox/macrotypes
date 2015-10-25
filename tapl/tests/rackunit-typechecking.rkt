@@ -50,6 +50,19 @@
               (syntax->datum #'e)))
      #'(void)]))
 
+(define-syntax (runtime-fail stx)
+  (syntax-parse stx #:datum-literals (:)
+    [(_ e (~optional (~seq #:with-msg msg-pat:str) #:defaults ([msg-pat ""])))
+     #:with e+ (expand/df #'e)
+     #'(check-exn (λ (ex)
+                     (or (regexp-match? (syntax-e #'msg-pat) (exn-message ex))
+                         (printf
+                          (string-append
+                           "ERROR-MSG ERROR: wrong err msg produced by expression ~v:\n"
+                           "EXPECTED:\nmsg matching pattern ~v,\nGOT:\n~v\n")
+                          (syntax->datum #'e) (syntax-e #'msg-pat) (exn-message ex))))
+                  (lambda () e+))]))
+
 (define-syntax (check-type-and-result stx)
   (syntax-parse stx #:datum-literals (: ⇒)
     [(_ e : τ ⇒ v)

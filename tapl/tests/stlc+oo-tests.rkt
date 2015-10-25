@@ -61,12 +61,11 @@
   #t)
  : String)
 
-;; TODO need to test runtime failures
-;; (check-type-and-result
-;;  ((λ ([x : (∪ String Int Bool Num)])
-;;      (to-string x))
-;;   #t)
-;;  : String ⇒ 'error)
+(runtime-fail
+ ((λ ([x : (∪ String Int Bool Num)])
+     (to-string x))
+  #t)
+ #:with-msg "Dynamic resolution failed")
 
 ;; Sneaks by, because 2 passes the predicate for integers
 (check-type-and-result
@@ -81,3 +80,8 @@
   3.14)
  : String)
 
+(runtime-fail
+ ((λ ([x : (∪ String Int Bool Num)])
+     (to-string x))
+  3.14)
+ #:with-msg "Dynamic resolution failed")
