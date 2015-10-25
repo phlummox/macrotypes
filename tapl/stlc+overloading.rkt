@@ -1,7 +1,7 @@
 #lang s-exp "typecheck.rkt"
 (reuse List cons nil #:from "stlc+cons.rkt")
 (extends "stlc+sub.rkt")
-(provide (for-syntax current-overload-resolver))
+(provide (for-syntax current-overload-resolver ℜ-name resolve-error))
 
 ;; Revision of overloading, using identifier macros instead of overriding #%app
 

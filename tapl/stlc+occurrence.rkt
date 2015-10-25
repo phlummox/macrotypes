@@ -2,6 +2,7 @@
 (extends "stlc+cons.rkt" #:except + #%datum and tup × proj ~×)
 (reuse tup × proj ~× #:from "stlc+tup.rkt")
 (extends "stlc+sub.rkt")
+(provide (for-syntax current-Π))
 
 ;; Calculus for occurrence typing.
 ;; - Types can be simple, or sets of simple types

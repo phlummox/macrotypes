@@ -31,4 +31,53 @@
   "two")
  : String ⇒ "str")
 
+;; -- just checking subtyping
+
+(typecheck-fail
+ (to-string (+ 1 1))
+ #:with-msg "Could not resolve instance")
+
+(typecheck-fail
+ (to-string 3.14)
+ #:with-msg "Could not resolve instance")
+
 ;; -- 
+
+(check-type-and-result
+ ((λ ([x : (∪ String Int Bool Num)])
+     (to-string x))
+  "two")
+ : String ⇒ "str")
+
+(check-type-and-result
+ ((λ ([x : (∪ String Int Bool Num)])
+     (to-string x))
+  6)
+ : String ⇒ "int")
+
+(check-type
+ ((λ ([x : (∪ String Int Bool Num)])
+     (to-string x))
+  #t)
+ : String)
+
+;; TODO need to test runtime failures
+;; (check-type-and-result
+;;  ((λ ([x : (∪ String Int Bool Num)])
+;;      (to-string x))
+;;   #t)
+;;  : String ⇒ 'error)
+
+;; Sneaks by, because 2 passes the predicate for integers
+(check-type-and-result
+ ((λ ([x : (∪ String Int Bool Num)])
+     (to-string x))
+  (+ 1 1))
+ : String ⇒ "int")
+
+(check-type
+ ((λ ([x : (∪ String Int Bool Num)])
+     (to-string x))
+  3.14)
+ : String)
+
