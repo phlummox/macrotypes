@@ -1,7 +1,7 @@
 #lang s-exp "typecheck.rkt"
 (reuse List cons nil #:from "stlc+cons.rkt")
-;; (reuse #:from "stlc+rec-iso.rkt") ; to load current-type=?
 (extends "stlc+sub.rkt")
+(provide (for-syntax current-overload-resolver))
 
 ;; Revision of overloading, using identifier macros instead of overriding #%app
 
@@ -9,56 +9,71 @@
 ;; === Resolvers
 
 (begin-for-syntax
+
+ ;; Resolver data structures stand for overloaded functions
+ ;; - name : identifier for the overloaded function
+ ;; - dom* : domains of the overloaded function
+ ;; - cod  : range of the overloaded function
+ ;; For now, only the domain can be overloaded
+ ;;  and the domain must be one type (single-argument function).
+ ;; TODO generalize to have 1 signature (with holes) and unifying types
  (struct ℜ (
-   name ;; Symbol
+   name ;; Syntax, an identifier
    dom* ;; (Box (Listof (Pairof Type Expr)))
-   cod  ;; Type
+   cod  ;; Type, (also syntax)
  ) #:constructor-name make-ℜ
-;   #:prefab
+;   #:prefab ;; Tried to avoid 3D syntax with this, but prefabs can't store syntax objs
  )
 
- ;; Rad!
- (define (ℜ-add! ℜ τ e)
+ ;; Register an expression `e` at type `τ`.
+ ;; Future resolves looking for `τ` should return `e`.
+ (define (ℜ-add! ℜ τ e) ; Rad!
    (define dom* (ℜ-dom* ℜ))
    (set-box! dom* (cons (cons τ e) (unbox dom*))))
 
+ ;; Create an empty resolver -- an overloadable function with no instances
  (define (ℜ-init name τ-cod)
    (make-ℜ name (box '()) τ-cod))
 
+ ;; Get the type represented by the resolver
+ ;; Optional arguments fill in the holes
  (define (ℜ->type ℜ #:subst [τ-dom (assign-type #''α #'#%type)])
    ((current-type-eval) #`(→ #,τ-dom #,(ℜ-cod ℜ))))
 
+ ;; Search the resolver's instances for one matching `τ`,
+ ;;  according to comparator `=?`
  (define (ℜ-find ℜ τ #:=? =?)
    (define (τ=? τ2)
      (=? τ τ2))
    (assf τ=? (unbox (ℜ-dom* ℜ))))
 
- (define (ℜ-resolve ℜ τ-or-e #:exact? [exact? #f])
-   (define r
-     (if (syntax? τ-or-e) ;; Can I ask "type?"
-         (ℜ-resolve-syntax ℜ τ-or-e #:exact? exact?)
-         (ℜ-resolve-value  ℜ τ-or-e #:exact? exact?)))
-   (or r
-       (error 'ℜ (format "Resolution for '~a' failed at type ~a"
-                         (syntax->datum (ℜ-name ℜ))
-                         τ-or-e))))
+ ;; Resolve a type into an instance
+ (define (ℜ-resolve ℜ τ-or-e)
+   (if (syntax? τ-or-e) ;; Can I ask "type?"
+       (ℜ-resolve-syntax ℜ τ-or-e)
+       (ℜ-resolve-value  ℜ τ-or-e)))
 
- (define (ℜ-resolve-syntax ℜ τ #:exact? [exact? #f])
-   ;; First try exact matches, then fall back to subtyping (unless 'exact?' is set).
-   ;; When subtyping, the __order instances were declared__ resolves ties.
+ (define (ℜ-resolve-syntax ℜ τ)
+   ;; First try =? matches, then fall back to the typecheck relation
+   ;; (In the fallback, the ORDER instances are stored resolves ties)
    (define result
      (or (ℜ-find ℜ τ #:=? (current-type=?))
-         (and (not exact?)
+         (and (not (eq? (current-type=?) (current-typecheck-relation)))
               (ℜ-find ℜ τ #:=? (current-typecheck-relation)))))
    (and (pair? result)
         (cdr result)))
 
- (define (ℜ-resolve-value ℜ e #:exact? [exact? #f])
+ (define (ℜ-resolve-value ℜ e)
    (error 'ℜ (format "Runtime resolution not implemented. Anyway your value was ~a" e)))
 
+ ;; True if the resolver does not have a binding for `τ`
  (define (ℜ-unbound? ℜ τ)
-   (not (ℜ-resolve-syntax ℜ τ #:exact? #t)))
+   (not (parameterize ([current-typecheck-relation (current-type=?)])
+          (ℜ-resolve-syntax ℜ τ))))
 
+ ;; Reflect an identifier into a resolver
+ ;; - Trigger the identifier macro for `id`
+ ;; - Parse the syntax-object result into a resolver structure
  (define (syntax->ℜ id)
    ;; Don't care about the type
    (define stx+τ (infer+erase id))
@@ -86,8 +101,10 @@
  (define-syntax-rule (instance-error id τ reason)
    (error-template 'instance id τ reason))
 
- (define-syntax-rule (resolve-error id τ reason)
-   (error-template 'resolve id τ reason))
+ (define-syntax-rule (resolve-error id τ)
+   (error-template 'resolve id τ "Could not resolve instance."))
+
+ (define current-overload-resolver (make-parameter ℜ-resolve))
 )
 
 ;; =============================================================================
@@ -101,9 +118,11 @@
         (syntax-parser
          [_:id
           #'(quote #,ℜ)] ;; Is there a way to transmit ℜ directly?
-         [(n e)
+         [(_ e)
           #:with [e+ τ+] (infer+erase #'e)
-          #:with n+ (ℜ-resolve #,ℜ #'τ+)
+          #:with n+ ((current-overload-resolver) #,ℜ #'τ+)
+          (unless (syntax-e #'n+)
+            (resolve-error #'name #'τ+))
           (⊢ (#%app n+ e+)
              : τ-cod)]
          [(_ e* (... ...))
@@ -118,7 +137,9 @@
    ;; Extract a resolver from the syntax object
    (define ℜ (syntax->ℜ #'name))
    ;; Apply the resolver to the argument type. woo-wee!
-   (define e (ℜ-resolve ℜ #'τ+ #:exact? #t))
+   (define e (parameterize ([current-typecheck-relation (current-type=?)])
+               ((current-overload-resolver) ℜ #'τ+)))
+   (unless e (resolve-error #'name #'τ+))
    (⊢ #,e : #,(ℜ->type ℜ #:subst #'τ+))])
 
 (define-typed-syntax instance
