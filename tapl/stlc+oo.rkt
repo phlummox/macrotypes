@@ -19,7 +19,8 @@
                      (#,e #,dyn-id)
                      #,body)
                body))))
-     #`(lambda (#,dyn-id) #,dyn-body)]
+     (and (not (eq? dyn-body dyn-fail))
+          #`(lambda (#,dyn-id) #,dyn-body))]
      ;; (define dyn-body ;; Typed version, currently broken
      ;;   (for/fold ([body dyn-fail])
      ;;             ([τ (in-syntax #'(τ* ...))])

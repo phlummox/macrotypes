@@ -85,3 +85,9 @@
      (to-string x))
   3.14)
  #:with-msg "Dynamic resolution failed")
+
+;; Dynamic resolution can't possibly succeed
+(typecheck-fail
+ (λ ([x : (∪ Bool Num)])
+    (to-string x))
+ #:with-msg "Could not resolve instance")
