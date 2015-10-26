@@ -1,6 +1,7 @@
 #lang s-exp "typecheck.rkt"
+(extends "stlc.rkt" #:rename [#%app stlc:#%app] [λ stlc:λ])
 (extends "stlc+overloading.rkt")
-(extends "stlc+occurrence.rkt")
+(extends "stlc+occurrence+cons.rkt")
 
 (begin-for-syntax
  (define (∪-resolve ℜ τ-∪)
@@ -9,28 +10,20 @@
      ;; Create a lambda that does run-time type tests for all the known types
      ;;  in the union
      (define dyn-id (generate-temporary))
-     (define dyn-fail #`(raise-user-error (format "Dynamic resolution failed for '~a' at value '~a'" '#,(syntax->datum (ℜ-name ℜ)) #,dyn-id)))
-     (define dyn-body ;; The untyped version
+     (define dyn-fail
+       (⊢ (raise-user-error (format "Dynamic resolution failed for '~a' at value '~a'" '#,(syntax->datum (ℜ-name ℜ)) #,dyn-id))
+          : Bot))
+     (define dyn-body ;; Typed version, currently broken
        (for/fold ([body dyn-fail])
                  ([τ (in-syntax #'(τ* ...))])
          (let ([e ((current-overload-resolver) ℜ τ)])
            (if e
-               #`(if (#,((current-Π) τ) #,dyn-id)
-                     (#,e #,dyn-id)
-                     #,body)
+               #`(test (#,τ ? #,dyn-id)
+                       (stlc:#%app #,e #,dyn-id)
+                       #,body)
                body))))
      (and (not (eq? dyn-body dyn-fail))
-          #`(lambda (#,dyn-id) #,dyn-body))]
-     ;; (define dyn-body ;; Typed version, currently broken
-     ;;   (for/fold ([body dyn-fail])
-     ;;             ([τ (in-syntax #'(τ* ...))])
-     ;;     (let ([e ((current-overload-resolver) ℜ τ)])
-     ;;       (if e
-     ;;           #`(test (#,τ ? #,dyn-id)
-     ;;                   (#,e #,dyn-id)
-     ;;                   #,body)
-     ;;           body))))
-     ;; #`(λ ([#,dyn-id : (∪ τ* ...)]) #,dyn-body)]
+          #`(stlc:λ ([#,dyn-id : (∪ τ* ...)]) #,dyn-body))]
     [_ ;; Lookup failed
      #f]))
 

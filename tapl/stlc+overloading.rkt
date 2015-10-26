@@ -123,7 +123,7 @@
           #:with n+ ((current-overload-resolver) #,ℜ #'τ+)
           (unless (syntax-e #'n+)
             (resolve-error #'name #'τ+))
-          (⊢ (#%app n+ e+)
+          (⊢ (n+ e+)
              : τ-cod)]
          [(_ e* (... ...))
           #'(raise-arity-error (syntax->datum name) 1 e* (... ...))]))

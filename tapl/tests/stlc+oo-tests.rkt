@@ -61,7 +61,7 @@
   #t)
  : String)
 
-(runtime-fail
+#;(runtime-fail
  ((λ ([x : (∪ String Int Bool Num)])
      (to-string x))
   #t)
