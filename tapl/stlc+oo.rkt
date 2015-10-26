@@ -13,7 +13,7 @@
      (define dyn-fail
        (⊢ (raise-user-error (format "Dynamic resolution failed for '~a' at value '~a'" '#,(syntax->datum (ℜ-name ℜ)) #,dyn-id))
           : Bot))
-     (define dyn-body ;; Typed version, currently broken
+     (define dyn-body
        (for/fold ([body dyn-fail])
                  ([τ (in-syntax #'(τ* ...))])
          (let ([e ((current-overload-resolver) ℜ τ)])
