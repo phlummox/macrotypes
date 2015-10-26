@@ -218,6 +218,7 @@
 
 ;; ----------------------------------------------------------------------------- 
 ;; --- misc subtyping + filters (regression tests)
+
 (check-type
  (λ ([x : (∪ Int Bool)])
     (test (Int ? x)
@@ -384,179 +385,6 @@
   : (∪ Int String) ⇒ "hi")
 
 ;; -----------------------------------------------------------------------------
-;; --- Subtyping products
-
-(check-type (tup 1) : (× Nat))
-(check-type (tup 1) : (× Int))
-(check-type (tup 1) : (× Num))
-(check-type (tup 1) : (× Top))
-(check-type (tup 1) : Top)
-
-(check-not-type (tup 1) : Bool)
-(check-not-type (tup 1) : String)
-(check-not-type (tup 1) : (× String))
-(check-not-type (tup 1) : (× Int String))
-(check-not-type (tup 1) : Bot)
-
-(check-type (tup 1 2 3) : (× Int Nat Num))
-(check-type (tup 1 2 3) : (× Num Nat Num))
-(check-type (tup 1 2 3) : (× Top Top Num))
-(check-type (tup 1 "2" 3) : (× Int Top Int))
-
-(check-not-type (tup 1 2 3) : (× Nat Nat String))
-
-;; -----------------------------------------------------------------------------
-;; --- Latent filters (on products)
-
-(check-type
- (λ ([v : (× (∪ Int String) Int)])
-    (test (Int ? (proj v 0))
-          (+ (proj v 0) (proj v 1))
-          0))
- : (→ (× (∪ Int String) Int) Num))
-
-(check-type-and-result
- ((λ ([v : (× (∪ Int String) Int)])
-    (test (Int ? (proj v 0))
-          (+ (proj v 0) (proj v 1))
-          0))
-  (tup ((λ ([x : (∪ Int String)]) x) -2) -3))
- : Num ⇒ -5)
-
-(check-type-and-result
- ((λ ([v : (× (∪ Int String) Int)])
-    (test (Int ? (proj v 0))
-          (+ (proj v 0) (proj v 1))
-          0))
-  (tup "hi" -3))
- : Num ⇒ 0)
-
-;; --- Use a product as filter
-
-(check-type
- (λ ([x : (∪ Int (× Int Int Int))])
-    (test (Int ? x)
-          (+ 1 x)
-          (+ (proj x 0) (+ (proj x 1) (proj x 2)))))
- : (→ (∪ (× Int Int Int) Int) Num))
-
-(check-type-and-result
- ((λ ([x : (∪ Int (× Int Int Int))])
-     (test (Int ? x)
-           (+ 1 x)
-           (+ (proj x 0) (+ (proj x 1) (proj x 2)))))
-  0)
- : Num ⇒ 1)
-
-(check-type-and-result
- ((λ ([x : (∪ Int (× Int Int Int))])
-     (test (Int ? x)
-           (+ 1 x)
-           (+ (proj x 0) (+ (proj x 1) (proj x 2)))))
-  (tup 2 2 2))
- : Num ⇒ 6)
-
-(check-type-and-result
- ((λ ([x : (∪ Int (× String Nat) (× Int Int Int))])
-     (test (Int ? x)
-           (+ 1 x)
-     (test ((× Int Int Int) ? x)
-           (+ (proj x 0) (+ (proj x 1) (proj x 2)))
-           (proj x 1))))
-  (tup 2 2 2))
- : Num ⇒ 6)
-
-(check-type-and-result
- ((λ ([x : (∪ Int (× String Nat) (× Int Int Int))])
-     (test (Int ? x)
-           (+ 1 x)
-     (test ((× Int Int Int) ? x)
-           (+ (proj x 0) (+ (proj x 1) (proj x 2)))
-           (proj x 1))))
-  (tup "yolo" 33))
- : Num ⇒ 33)
-
-;; -- All together now
-
-(check-type-and-result
- ((λ ([x : (∪ Int (× Bool Bool) (× Int (∪ String Int)))])
-     (test (Int ? x)
-           "just an int"
-     (test ((× Bool Bool) ? x)
-           "pair of bools"
-           (test (String ? (proj x 1))
-                 (proj x 1)
-                 "pair of ints"))))
-  (tup 33 "success"))
- : String ⇒ "success")
-
-(check-type-and-result
- ((λ ([x : (∪ Int (× Int Int) (× Int (∪ String Int)))])
-     (test (Int ? x)
-           "just an int"
-     (test ((× Int Int) ? x)
-           "pair of ints"
-           (test (String ? (proj x 1))
-                 (proj x 1)
-                 "another pair of ints"))))
-  (tup 33 "success"))
- : String ⇒ "success")
-
-;; -----------------------------------------------------------------------------
-;; --- Filter lists
-
-(check-type
- (λ ([x : (List (∪ Int String))])
-    (test ((List String) ? x)
-          x
-          #f))
- : (→ (List (∪ Int String)) (∪ Bool (List String))))
-
-;; -- -subtyping lists
-(check-type
- (cons 1 (nil {Nat}))
- : (List Int))
-
-(check-type
- ((λ ([filter/3 : (→ (List (∪ Int String)) (List Int))]
-      [add*/3 : (→ Num (List Num) (List Num))]
-      [xs : (×  (∪ Int String) (∪ Int String) (∪ Int String))])
-     (add*/3 5 (filter/3 (cons (proj xs 0)
-                               (cons (proj xs 1)
-                                     (cons (proj xs 2)
-                                           (nil {(∪ String Int)})))))))
-  ;; filter (okay this is a little tricky for recursion)
-  (λ ([xs : (List (∪ Int String))])
-     ((λ ([v1 : (∪ Int String)]
-          [v2 : (∪ Int String)]
-          [v3 : (∪ Int String)])
-         (test (Int ? v1)
-               (cons v1 (test (Int ? v2)
-                              (cons v2 (test (Int ? v3)
-                                             (cons v3 (nil {Int}))
-                                             (nil {Int})))
-                              (test (Int ? v3)
-                                    (cons v3 (nil {Int}))
-                                    (nil {Int}))))
-               (test (Int ? v2)
-                     (cons v2 (test (Int ? v3)
-                                    (cons v3 (nil {Int}))
-                                    (nil {Int})))
-                     (test (Int ? v3)
-                           (cons v3 (nil {Int}))
-                           (nil {Int})))))
-      (head xs) (head (tail xs)) (head (tail (tail xs)))))
-  ;; add3
-  (λ ([n : Num] [xs : (List Num)])
-     (cons (+ n (head xs))
-      (cons (+ n (head (tail xs)))
-       (cons (+ n (head (tail (tail xs))))
-        (nil {Num})))))
-  ;; xs (3-tuple)
-  (tup 1 "foo" 3))
- : (List Num))
-
-;; -----------------------------------------------------------------------------
 ;; --- ICFP'10 examples
 
 ;; -- Exaple 1 (x can have any type)
@@ -592,16 +420,6 @@
           (f x)
           0))
  : (→ (∪ Num String Top) (→ (∪ Num String) Num) Num))
-
-;; Exmample 10 (we don't allow non-homogenous lists, so need to select head before filtering)
-(check-type
- (λ ([p : (List (∪ Nat String))])
-    ((λ ([x : (∪ Nat String)])
-       (test (Num ? x)
-             (+ 1 x)
-             7))
-    (head p)))
- : (→ (List (∪ Nat String)) Num))
 
 ;; -----------------------------------------------------------------------------
 ;; --- TODO CPS filters

@@ -1,19 +1,19 @@
 #lang s-exp "typecheck.rkt"
-(extends "stlc+cons.rkt" #:except + #%datum and tup × proj ~×)
-(reuse tup × proj ~× #:from "stlc+tup.rkt")
 (extends "stlc+sub.rkt")
-(provide (for-syntax current-Π))
+(provide (for-syntax current-Π ∖ type->filter type*->filter*))
 
 ;; Calculus for occurrence typing.
 ;; - Types can be simple, or sets of simple types
 ;;   (aka "ambiguous types";
 ;;    the run-time value will have one of a few ambiguous possible types.)
-;; - The ∪ constructor makes ambiguous types
+
+;; The ∪ constructor makes ambiguous types
 ;; - `(test [τ ? x] e1 e2)` form will insert a run-time check to discriminate ∪
 ;; -- If the value at identifier x has type τ, then we continue to e1 with [x : τ]
 ;; -- Otherwise, we move to e2 with [x : (- (typeof x) τ)].
 ;;    i.e., [x : τ] is not possible
-;; - Subtyping rules:
+
+;; Subtyping rules:
 ;; -- ALL : t ... <: t' => (U t ...) <: t'
 ;; -- AMB : t <: (U ... t ...)
 ;; -- EXT : (U t' ...) <: (U t t' ...)
@@ -41,7 +41,7 @@
   (define (list->∪ τ*)
     (if (null? τ*)
         #'Bot
-        (τ-eval #`(∪ #,@τ*))))
+        ((current-type-eval) #`(∪ #,@τ*))))
 
   (define (∖ τ1 τ2)
     (cond
@@ -62,8 +62,6 @@
 
 (begin-for-syntax
 
-  (define τ-eval (current-type-eval))
-
   (define (τ->symbol τ)
     (syntax-parse τ
      [(_ κ)
@@ -82,7 +80,8 @@
   (define ∪-eval 
     ;; Private helper: check that all functions have unique arities
     ;; It's private because it assumes all τ* have been evaluated
-    (let ([assert-unique-arity-arrows
+    (let ([τ-eval (current-type-eval)]
+          [assert-unique-arity-arrows
            (lambda (τ*)
              (for/fold ([seen '()])
                        ([τ (in-list τ*)])
@@ -113,7 +112,7 @@
        (define τ
          (cond
           [(null? τ*)
-           (raise-user-error 'τ-eval "~a (~a:~a) empty union type ~a\n"
+           (raise-user-error '∪-eval "~a (~a:~a) empty union type ~a\n"
                              (syntax-source τ-stx) (syntax-line τ-stx) (syntax-column τ-stx)
                              (syntax->datum τ-stx))]
           [(null? (cdr τ*))
@@ -194,7 +193,7 @@
     (map (current-Π) τ*))
 
   (define (simple-Π τ)
-    (syntax-parse (τ-eval τ)
+    (syntax-parse ((current-type-eval) τ)
      [~Bool
       #'boolean?]
      [~Int
@@ -214,39 +213,12 @@
      [_
       (error 'Π "Cannot make filter for type ~a\n" (syntax->datum τ))]))
    (current-Π simple-Π)
-
 )
 
 ;; (test (τ ? x) e1 e2)
 ;; - drop absurd branches?
 ;; - allow x not identifier (1. does nothing 2. latent filters)
 (define-typed-syntax test #:datum-literals (?)
-  ;; -- THIS CASE BELONGS IN A NEW FILE
-  [(_ [τ0+:type ? (unop x-stx:id n-stx:nat)] e1 e2)
-   ;; 1. Check that we're using a known eliminator
-   #:when (free-identifier=? #'proj #'unop)
-   ;; 2. Make sure we're filtering with a valid type
-   #:with f (type->filter #'τ0+)
-   ;; 3. Typecheck the eliminator call. Remember the type & apply the filter.
-   ;;    (This type is PROBABLY a union -- else why bother testing!)
-   #:with (e0+ τ0) (infer+erase #'(unop x-stx n-stx))
-   #:with τ0- (∖ #'τ0 #'τ0+)
-   ;; 4. Build the +/- types for our identifier; the thing we apply the elim. + test to
-   ;;    We know that x has a pair type because (proj x n) typechecked
-   #:with (x (~× τi* ...)) (infer+erase #'x-stx)
-   #:with τ+ #`(× #,@(replace-at (syntax->list #'(τi* ...)) (syntax-e #'n-stx) #'τ0+))
-   #:with τ- #`(× #,@(replace-at (syntax->list #'(τi* ...)) (syntax-e #'n-stx) #'τ0-))
-   ;; 5. Check the branches with the refined types
-   #:with [x1 e1+ τ1] (infer/ctx+erase #'([x-stx : τ+]) #'e1)
-   #:with [x2 e2+ τ2] (infer/ctx+erase #'([x-stx : τ-]) #'e2)
-   ;; 6. Desugar, replacing the filtered identifier
-   (⊢  (if (f e0+)
-           ((lambda x1 e1+) x-stx)
-           ((lambda x2 e2+) x-stx))
-      : (∪ τ1 τ2))]
-  ;; TODO lists
-  ;; For now, we can't express the type (List* A (U A B)), so our filters are too strong
-  ;; -- THE ORIGINAL
   [(_ [τ0+:type ? x-stx:id] e1 e2)
    #:with f (type->filter #'τ0+)
    #:with (x τ0) (infer+erase #'x-stx)
@@ -259,88 +231,3 @@
           ((lambda x2 e2+) x-stx))
       : (∪ τ1 τ2))])
 
-;; =============================================================================
-;; === BELONGS IN A NEW FILE
-
-;; (extends "stlc+occurrence.rkt"); #:rename [test ot:test])
-;; (extends "stlc+tup.rkt" #:except + #%datum)
-
-(define-for-syntax (replace-at τ* n τ-new)
-  (for/list ([τ-old (in-list τ*)]
-             [i (in-naturals)])
-    (if (= i n)
-        τ-new
-        τ-old)))
-
-;; Add subtyping for tuples
-(begin-for-syntax
- (define ×-sub?
-   (let ([sub? (current-sub?)])
-     (lambda (τ1-stx τ2-stx)
-       (define τ1 ((current-type-eval) τ1-stx))
-       (define τ2 ((current-type-eval) τ2-stx))
-       (or (Bot? τ1) (Top? τ2)
-           (syntax-parse `(,τ1 ,τ2)
-            [((~× τi1* ...)
-              (~× τi2* ...))
-             (and (stx-length=? #'(τi1* ...)
-                                #'(τi2* ...))
-                  ;; Gotta use (current-sub?), because products may be recursive
-                  (stx-andmap (current-sub?) #'(τi1* ...) #'(τi2* ...)))]
-            [_
-             (sub? τ1 τ2)])))))
- (current-sub? ×-sub?)
- (current-typecheck-relation (current-sub?)))
-
-;; --- Update Π for products
-(begin-for-syntax
- (define π-Π
-   (let ([Π (current-Π)])
-     (lambda (τ)
-       (syntax-parse (τ-eval τ)
-        [(~× τ* ...)
-         (define filter* (type*->filter* (syntax->list #'(τ* ...))))
-         #`(lambda (v*)
-             (and (list? v*)
-                  (for/and ([v (in-list v*)]
-                            [f (in-list (list #,@filter*))])
-                    (f v))))]
-        [_ ;; Fall back
-         (Π τ)]))))
- (current-Π π-Π))
-
-;; =============================================================================
-;; === Lists
-
-;; Subtyping for lists
-(begin-for-syntax
- (define list-sub?
-   (let ([sub? (current-sub?)])
-     (lambda (τ1-stx τ2-stx)
-       (define τ1 ((current-type-eval) τ1-stx))
-       (define τ2 ((current-type-eval) τ2-stx))
-       (or (Bot? τ1) (Top? τ2)
-           (syntax-parse `(,τ1 ,τ2)
-            [((~List τi1)
-              (~List τi2))
-             ((current-sub?) #'τi1 #'τi2)]
-            [_
-             (sub? τ1 τ2)])))))
- (current-sub? list-sub?)
- (current-typecheck-relation (current-sub?)))
-
-;; --- Update Π for lists
-(begin-for-syntax
- (define list-Π
-   (let ([Π (current-Π)])
-     (lambda (τ)
-       (syntax-parse (τ-eval τ)
-        [(~List τi)
-         (define f ((current-Π) #'τi))
-         #`(lambda (v*)
-             (and (list? v*)
-                  (for/and ([v (in-list v*)])
-                    (#,f v))))]
-        [_ ;; Fall back
-         (Π τ)]))))
- (current-Π list-Π))
