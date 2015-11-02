@@ -61,8 +61,9 @@
 ;; --- pass
 (check-type
  (resolve
-  (instance (signature (α) (→ α Str))
-            (λ ([x : Int]) "int"))
+  (instance
+   (signature (α) (→ α Str))
+   (λ ([x : Int]) "int"))
   Int)
  : (→ Int Str))
 
@@ -108,3 +109,7 @@
    (λ ([x : Boolean]) #t))
   Nat)
  #:with-msg "No matching instance")
+
+;; --- TODO implicit resolve
+;; --- TODO 
+

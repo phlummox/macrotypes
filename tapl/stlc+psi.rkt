@@ -278,9 +278,8 @@
 
 (define-typed-syntax resolve
   [(_ e τ)
-   ;; Exapnding didn't work without an ⇑
    ;; TODO don't unfold the type to an →, instead [τ / α]
-   #:with [Σ ((α) (⟦Σ⟧-stx (~→ τ_α τ_cod)))] (⇑ e as ψ)
+   #:with [Σ (~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod))] (infer+erase #'e)
    #:with τ+ ((current-type-eval) #'τ)
    (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
    (unless (⟦Σ⟧-mem? ⟦Σ⟧ #'τ+)
