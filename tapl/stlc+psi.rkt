@@ -2,16 +2,18 @@
 ;; (extends "stlc+sub.rkt" #:except #%datum #:rename [#%app stlc:#%app])
 ;(extends "stlc+tup.rkt" #:except + #%datum and)
 ;(extends "stlc+cons.rkt" #:except + #%datum and)
-(reuse current-Π #:from "stlc+occurrence.rkt") ;; Install current-Π
-(extends "sysf.rkt" #:except #%datum) ; load current-type=?
+(reuse [#%datum stlc+occurrence:#%datum] current-Π Bot Str Boolean #:from "stlc+occurrence.rkt")
+(extends "sysf.rkt" #:except #%datum +) ; load current-type=?
 
 ;; Parametric overloading.
-;; - define overloadable functions with "template" types
-;; - later, add implementations
-;; -- typecheck the impl
-;; -- save in a table
-;; - for app, lookup the overloaded ID
-;; - allow higher-order positions
+;; - (signature (α) τ) : define overloadable function with type τ
+;; - (instance σ e)    : add implementation `e` to the overloaded `σ`
+;; -- `e` is typechecked against the declared signature
+;; -- code for `e` is associated with the type it replaces `α` with
+;; - (resolve σ τ) : uses the type `τ` to convert the overloaded `σ` to an exact instance
+
+;; Overloaded functions are first class, and can be passed as arguments etc.
+;; They try to resolve at compile-time, but will resort to run-time tag checks
 
 ;; Implementation strategy
 ;; - make explicit type for overloadables
@@ -26,14 +28,13 @@
 ;; - multiple params
 ;; - multiple methods (separate extension)
 
-;; =============================================================================
-
-(define-base-type Bot)
-(define-base-type String)
-
 (define-typed-syntax #%datum
-  [(_ . n:str) (⊢ (#%datum . n) : String)]
-  [(_ . x) #'(sysf:#%datum . x)])
+  [(_ . n)
+   ;; TODO why is this getting called? is datum called on types?
+   #:when (⟦Σ⟧? (syntax-e #'n))
+   (⊢ (#%datum . n) : #%type)]
+  [(_ . x) #'(stlc+occurrence:#%datum . x)])
+   
 
 ;; =============================================================================
 ;; === ψ types
@@ -42,9 +43,86 @@
 ;; - α is a bound variable
 ;; - § is the carrier set for the algebra of types the ψ is defined on
 ;; - τ is a type with α free
+;; TODO : round2, § now contains a compile-time map
 (define-type-constructor ψ #:arity = 2 #:bvs = 1)
 ;; For representing carrier sets. The first argument to ψ should be an §-type
 (define-type-constructor § #:arity >= 0)
+
+;; =============================================================================
+;; === Type->Expr maps
+
+;; § is compile-time, Σ lives at runtime
+
+(struct Σ (
+  map ;; (Listof (Pairof (-> Any Boolean) Expr)), maps type predicates to implementations
+ ) #:transparent
+   #:constructor-name make-Σ
+   #:property prop:procedure
+   (lambda (self arg)
+     (define fn (Σ-lookup self arg))
+     (fn arg)))
+
+(define (Σ-add Σ τ e)
+  (make-Σ (cons (cons τ e) (Σ-map Σ))))
+
+(define (Σ-init)
+  (make-Σ '()))
+
+(define (Σ-lookup Σ e)
+  (or
+   (for/first ([τ+e (in-list (Σ-map Σ))] #:when ((car τ+e) e))
+     (cdr τ+e))
+   (error 'Σ (format "Runtime type dispatch failed: no match for argument '~a'" e))))
+
+;; -----------------------------------------------------------------------------
+
+(begin-for-syntax
+ (define (⟦Σ⟧-write ⟦Σ⟧ port mode)
+   ;; Synthesize a §-type
+   (define s ((current-type-eval) #`(§ #,@(map car (⟦Σ⟧-map ⟦Σ⟧)))))
+   (if mode
+       (write   s port)
+       (display s port)))
+
+ (struct ⟦Σ⟧ (
+   map
+  ) #:transparent
+    #:constructor-name make-⟦Σ⟧
+    ;; #:methods gen:custom-write
+    ;; [(define write-proc ⟦Σ⟧-write)]
+ )
+
+ (define (⟦Σ⟧-add ⟦Σ⟧ τ e)
+   (make-⟦Σ⟧ (cons (cons τ e) (⟦Σ⟧-map ⟦Σ⟧))))
+
+ (define (⟦Σ⟧-mem? ⟦Σ⟧ τ)
+   (define τ=? (current-type=?))
+   (for/or ([τ+e (in-list (⟦Σ⟧-map ⟦Σ⟧))])
+     (τ=? τ (car τ+e))))
+
+ (define (⟦Σ⟧-init)
+   (make-⟦Σ⟧ '()))
+
+ (define (⟦Σ⟧-lookup ⟦Σ⟧ τ)
+   ;; TODO should be subtyping here
+   (define τ=? (current-type=?))
+   (for/first ([τ+e (in-list (⟦Σ⟧-map ⟦Σ⟧))]
+               #:when (τ=? τ (car τ+e)))
+     (cdr τ+e)))
+
+ ;; Check that all the types (keys) are the same
+ (define (⟦Σ⟧=? τ=? ⟦Σ⟧1 ⟦Σ⟧2)
+   ;; idk if τ=? should be a parameter or not
+   (for/and ([τ1 (in-list (cannonize (map car (⟦Σ⟧-map ⟦Σ⟧1))))]
+             [τ2 (in-list (cannonize (map car (⟦Σ⟧-map ⟦Σ⟧2))))])
+     (τ=? τ1 τ2)))
+
+ ;; Reflect an §-type to a syntax map, for uniformity
+ (define (§->⟦Σ⟧ τ*)
+   (make-⟦Σ⟧ (for/list ([τ (in-list (cannonize τ*))]) (cons τ #f))))
+)
+
+;; =============================================================================
 
 ;; TODO put these in typecheck.rkt
 (begin-for-syntax
@@ -71,28 +149,27 @@
          #:key τ->symbol))
 )
 
+;; τ eval+equality
 (begin-for-syntax
-
- ;; (Lots of overlap with ∪-eval here)
- (define §-eval
+ (define ψ-eval
    (let ([τ-eval (current-type-eval)])
      (lambda (τ-stx)
-       ;; (printf "§-eval ~a\n" (syntax->datum τ-stx))
        (syntax-parse (τ-eval τ-stx)
-        [(~§ τ-stx* ...)
-         ;; Recursively evaluate members, should get a list of types
-         ;; (Currently can't handle ∀, ∃, etc but idk a good way to detect that "class"
-         (define τ*
-           (for/list ([τ (in-syntax #'(τ-stx* ...))])
-             (let ([τ+ ((current-type-eval) τ)])
-               (if (§? τ+)
-                   (error '§-eval (format "recursive carrier '~a'" (syntax->datum τ-stx)))
-                   τ+))))
-         ;; Remove duplicates, sort members
-         (τ-eval #`(§ #,@(cannonize τ*)))]
+        [(~ψ (α* ...) (~§ τ* ...) τ_α)
+         ;; Assert § is a valid carrier set (no variables besides α, not recursive)
+         ;; (Currently can't handle ∀, ∃, etc but idk a good way to detect that "class")
+         (define τ*+ 
+           ;; By the way, collect results in a list for the upcoming call to `cannonize`
+           (for/list ([τ (in-syntax #'(τ* ...))])
+             (when (§? τ)
+               (error 'ψ-eval (format "Recursive carrier set '~a'" (syntax->datum #'(τ* ...)))))
+             τ))
+         ;; ... could also check well-formedness of τ_α, not sure if this is the best place
+         ;;(§ #,@(cannonize τ*))
+         (τ-eval #`(ψ (α* ...) #,(assign-type #`#,(§->⟦Σ⟧ (cannonize τ*+)) #'#%type) τ_α))]
         [τ
          #'τ]))))
- (current-type-eval §-eval)
+ (current-type-eval ψ-eval)
 
  ;; Destruct ψ types into carrier & template.
  ;; - carriers should be τ=?* (zip & check),
@@ -101,53 +178,28 @@
    (let ([τ=? (current-type=?)])
      (lambda (τ1 τ2)
        (syntax-parse (list τ1 τ2)
-        [((~ψ (α) §1 τ_α)
-          (~ψ (β) §2 τ_β))
-         ;; WOW, I'm not even getting here
-         (and (τ=? #'§1 #'§2)
+        [((~ψ (α) ⟦Σ⟧1 τ_α)
+          (~ψ (β) ⟦Σ⟧2 τ_β))
+         (and (⟦Σ⟧=? τ=? (syntax->struct #'⟦Σ⟧1) (syntax->struct #'⟦Σ⟧2))
               (τ=? ((current-type-eval) #`(∀ (α) τ_α))
                    ((current-type-eval) #`(∀ (β) τ_β))))]
         [_ (τ=? τ1 τ2)]))))
+
+ (define (syntax->struct stx)
+   (unless (syntax? stx)
+     (error 'syntax->struct (format "expected a syntax object, got '~a'" stx)))
+   (define e (syntax-e stx))
+   (unless (and (list? e) (not (null? e)) (not (null? (cdr e))))
+     (error 'syntax->struct (format "expected a quoted value, got '~a'" e)))
+   (define e+ (cadr e))
+   (unless (syntax? e+)
+     (error 'syntax->struct (format "expected a nested syntax object, got '~a'" e+)))
+   (syntax-e e+))
 
  ;; TODO add subtyping
  (current-type=? ψ=?)
  (current-typecheck-relation (current-type=?))
 )
-
-;; =============================================================================
-;; === Signature maps
-;; Covert a type to an implementation. Use current-type-eval to normalize keys.
-;; These are the values with ψ type
-
- (define (Σ-print Σ port mode)
-   ;; TODO why are tests triggering this?
-   (displayln "*")
-   (displayln (Σ->carrier Σ) port))
-
- (struct Σ (
-   map ;; (Listof (Pairof τ* expr)), maps types to implementations
-   ;; TODO may want a MUTALBE structure here instead
-   ;; Hmm, if Σ is a #:mutable struct, am I certain untrusted people (outside this module)
-   ;;  cannot modify it?
- ) #:constructor-name make-Σ
-   #:property prop:procedure
-   (lambda (self arg)
-     (error 'Σ "Cannot apply struct, don't yet know how to turn types into predicates"))
-   ;; #:methods gen:custom-write
-   ;; [(define write-proc Σ-print)])
-) 
-
- (define (Σ-init)
-   (make-Σ '()))
-
- ;; Return the type representing Σ's carrier
- (define (Σ->carrier Σ)
-   #`(§ #,@(map car (Σ-map Σ))))
-   ;; ((current-type-eval) #`(§ #,@(map car (Σ-map Σ)))))
-  
-(define-syntax-rule (Σ-add Σ τ e)
-  (make-Σ (cons (cons τ e) (Σ-map Σ))))
-
 
 ;; =============================================================================
 
@@ -166,7 +218,6 @@
    (error 'signature (format "Cannot declare signature at type '~a'. ~a"
                              (syntax->datum τ)
                              reason)))
-
 )
 
 (define-typed-syntax signature
@@ -183,12 +234,8 @@
                                (format "Variable '~a' must be free in the signature type." (syntax->datum #'α))))]
            [_
             (signature-error #'τ "We only support single-argument functions with overloaded domains.")])
-   ;; TODO duplicate the map, into the keys?
-   ;; Do we save anything by putting it in the type, as opposed to tracking the value?
-   ;; (I ddon't think soo.... either need the value or value's type annotation
-   ;;  but maybe it's easier to propogate types than values across the type-checker)
    (⊢ (Σ-init)
-      : (ψ (α) (§) τ))])
+      : (ψ (α) #,(assign-type #`#,(⟦Σ⟧-init) #'#%type) τ))])
 
 (define-typed-syntax instance
   [(_ Σ e)
@@ -197,15 +244,15 @@
    ;; τ_Σ should be a ψ type
    ;; τ_e should be an arrow (for now, really it should match τ_α)
    (syntax-parse #'(τ_Σ τ_e)
-    [((~ψ (α) (~§ τ* ...) (~→ τ_α τ_cod1))
+    [((~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod1))
       (~→ τ_dom τ_cod2))
+     (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
      (define τ=? (current-type=?))
-     ;; Unify types (just ignore τ_α for now)
-     (when (for/or ([τ (in-syntax #'(τ* ...))])
-             (τ=? #'τ_dom τ))
+     ;; Assert τ_dom is new
+     (when (⟦Σ⟧-mem? ⟦Σ⟧ #'τ_dom)
        (instance-error (format "Duplicate instance at type '~a'" (syntax->datum #'τ_dom))))
+     ;; Unify codomains (just ignore τ_α for now)
      (unless (τ=? #'τ_cod1 #'τ_cod2)
-       (printf "OH SNAP not eq ~a and ~a\n" (syntax->datum #'τ_cod1) (syntax->datum #'τ_cod2))
        (instance-error (format "Cannot unify '~a' with template '~a'"
                                (syntax->datum #'(→ τ_dom τ_cod2))
                                (syntax->datum #'(→ τ_α τ_cod1)))))
@@ -213,7 +260,7 @@
      (⊢ (Σ-add Σ+ #,((current-Π) #'τ_dom) e+)
         ;; (Hm, maybe just get type from the updated Σ
         ;; Just add τ_dom to the type --- TODO use a helper function
-        : (ψ (α) (§ τ_dom τ* ...) (→ τ_α τ_cod1)))]
+        : (ψ (α) #,(assign-type #`#,(⟦Σ⟧-add ⟦Σ⟧ #'τ_dom #'e+) #'#%type) (→ τ_α τ_cod1)))]
     ;; Error cases
     [(_
       (~→ τ* ...))

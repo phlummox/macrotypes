@@ -2,8 +2,15 @@
 (require "rackunit-typechecking.rkt")
 
 ;; ----------------------------------------------------------------------------------------
+;; -- signature
 
-;; -- signature failures
+;; --- pass
+
+(check-type
+ (signature (β) (→ β Str))
+ : (ψ (β) (§) (→ β Str)))
+
+;; --- fail
 
 (typecheck-fail
  (signature (α) Int)
@@ -21,7 +28,17 @@
  (signature (a) (→ Int a))
  #:with-msg "Cannot declare")
 
-;; --- instance failures
+;; -----------------------------------------------------------------------------
+;; -- instance
+
+;; --- pass
+
+(check-type
+ (instance (signature (α) (→ α Str))
+           (λ ([x : Int]) "int"))
+ : (ψ (β) (§ Int) (→ β Str)))
+
+;; --- fail
 
 (typecheck-fail
  (instance 4 6)
@@ -36,13 +53,4 @@
            3)
  #:with-msg "only → types can be instances")
 
-;; -----------------------------------------------------------------------------
-
-(check-type
- (signature (β) (→ β String))
- : (ψ (β) (§) (→ β String)))
-
-(check-type
- (instance (signature (α) (→ α String))
-           (λ ([x : Int]) "int"))
- : (ψ (β) (§ Int) (→ β String)))
+;; ;; --- TODO more instances, resolvers
