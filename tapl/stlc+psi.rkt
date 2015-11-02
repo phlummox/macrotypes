@@ -2,7 +2,7 @@
 ;; (extends "stlc+sub.rkt" #:except #%datum #:rename [#%app stlc:#%app])
 ;(extends "stlc+tup.rkt" #:except + #%datum and)
 ;(extends "stlc+cons.rkt" #:except + #%datum and)
-(reuse [#%datum stlc+occurrence:#%datum] current-Π Bot Str Boolean #:from "stlc+occurrence.rkt")
+(reuse [#%datum stlc+occurrence:#%datum] current-Π Nat Bot Str Boolean #:from "stlc+occurrence.rkt")
 (extends "sysf.rkt" #:except #%datum +) ; load current-type=?
 
 ;; Parametric overloading.
@@ -22,7 +22,7 @@
 ;; - lookups query the type; the type contains the lookup table
 
 ;; TODO
-;; - constructors in carrier
+;; - constructors in carrier (× α α)
 ;; - partially-applied constructors in carrier (× $ Int)
 ;; - subtyping (also resolve, in the middle of things... this is where Σ ∈ τ might be good)
 ;; - multiple params
@@ -88,8 +88,8 @@
    map
   ) #:transparent
     #:constructor-name make-⟦Σ⟧
-    ;; #:methods gen:custom-write
-    ;; [(define write-proc ⟦Σ⟧-write)]
+    #:methods gen:custom-write
+    [(define write-proc ⟦Σ⟧-write)]
  )
 
  (define (⟦Σ⟧-add ⟦Σ⟧ τ e)
@@ -211,8 +211,10 @@
  (define-syntax-rule (instance-error reason)
    (error-template 'instance reason))
 
- (define-syntax-rule (resolve-error id τ reason)
-   (error-template 'resolve id τ reason))
+ (define-syntax-rule (resolve-error τ reason)
+   (error-template 'resolve (format "Cannot resolve at type '~a'. ~a"
+                                    (syntax->datum τ)
+                                    reason)))
  
  (define-syntax-rule (signature-error τ reason)
    (error 'signature (format "Cannot declare signature at type '~a'. ~a"
@@ -274,43 +276,17 @@
                     (syntax->datum #'τ_Σ)
                     (syntax->datum #'τ_e)))])])
 
-;; Eventually, take a list of types to an instance where the supplied types fill the holes.
-;; TODO make available to user, use define-typed-syntax
-#;(define-syntax (resolve stx)
- (syntax-parse stx
+(define-typed-syntax resolve
   [(_ e τ)
-   ;; #:when (error (format "ORIGINAL TYPE ~a" (syntax->datum (typeof #'e))))
-   #:with [e+ τ+] (⇑ e as ψ)
-   ;; #:with [e+ ((α) Σ ((~→ τ_α τ_cod)))] (⇑ e as ψ)
-   ;; (Temporary) Check that the type is a single-arg, overloaded-domain arrow
-   ;; TODO we should be able to do fine without a λ in the way
-   (error (format "my type is ~a\n" (syntax->datum #'τ+)))
-   ;; #:fail-unless (free-identifier=? #'α #'τ_α)
-   ;;   (format "Unsuppoted ψ-type ~a" (syntax->datum #'(→ τ_α τ_cod)))
-   ;; #:when (printf "HEY my Σ is ~a\n" #'Σ)
-   ;; ;; Lookup an implementation using the type (should this be a total function?)
-   ;; ;; (We statically know, via keys in Σ, whether the lookup succeeds)
-   ;; #:with e++ (#'Σ #'τ)
-   #;(⊢ e++
-      : (→ τ τ_cod))] ;; Fill in holes of the final type. TODO how does sysf fill holes?
-  #;[(_ e τ)
-   ;; Resolve any expression with a type. Why not.
-   #:with [e+ τ+] (infer+erase #'e)
-   #:fail-unless ((current-typecheck-relation) #'τ+ #'τ)
-     (format "Cannot resolve type of expression ~a. Expected ~a, but actual type is ~a"
-             (syntax->datum #'e+) (syntax->datum #'τ) (syntax->datum #'τ+))
-   (⊢ e+ : τ)]))
-
-;; Oh wait now, I really don't want to override #%app.
-;; Lets just do resolve first, and make it explicit.
-#;(define-typed-syntax #%app
-  [(_ e_fn e_arg)
-   ;; Check for overloaded e_fn
-   #:with [e_fn+ _] (⇑ e_fn as ψ)
-   ;; Infer the argument type
-   #:with [e_arg+ τ_arg] (infer+erase #'e_arg)
-   ;; Call out to resolve, then try apply again
-   #`(#%app (resolve e_fn+ τ_arg) e_arg+)]
-  [(_ e* ...)
-   #'(#%app e* ...)])
-
+   ;; Exapnding didn't work without an ⇑
+   ;; TODO don't unfold the type to an →, instead [τ / α]
+   #:with [Σ ((α) (⟦Σ⟧-stx (~→ τ_α τ_cod)))] (⇑ e as ψ)
+   #:with τ+ ((current-type-eval) #'τ)
+   (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
+   (unless (⟦Σ⟧-mem? ⟦Σ⟧ #'τ+)
+     (resolve-error #'τ "No matching instance."))
+   ;; Try resolving statically, else use the actual term Σ as a dictionary
+   (define f (or (⟦Σ⟧-lookup ⟦Σ⟧ #'τ+) #'Σ))
+   (⊢ #,f
+      ;; TODO use subst on the type, don't unfold into an →
+      : (→ τ+ τ_cod))])

@@ -1,6 +1,8 @@
 #lang s-exp "../stlc+psi.rkt"
 (require "rackunit-typechecking.rkt")
 
+;; TODO more passing examples for sig + instance
+
 ;; ----------------------------------------------------------------------------------------
 ;; -- signature
 
@@ -53,4 +55,56 @@
            3)
  #:with-msg "only → types can be instances")
 
-;; ;; --- TODO more instances, resolvers
+;; -----------------------------------------------------------------------------
+;; -- resolve
+
+;; --- pass
+(check-type
+ (resolve
+  (instance (signature (α) (→ α Str))
+            (λ ([x : Int]) "int"))
+  Int)
+ : (→ Int Str))
+
+(check-type-and-result
+ ((resolve
+   (instance (signature (α) (→ α Str))
+             (λ ([x : Nat]) "nat"))
+   Nat) 3)
+ : Str ⇒ "nat")
+
+(check-type-and-result
+ ((resolve
+   (instance
+    (instance (signature (α) (→ α Str))
+              (λ ([x : Nat]) "nat"))
+    (λ ([x : Boolean]) "bool"))
+   Nat)
+  3)
+ : Str ⇒ "nat")
+
+(check-type-and-result
+ ((resolve
+   (instance
+    (instance (signature (α) (→ α Str))
+              (λ ([x : Nat]) "nat"))
+    (λ ([x : Boolean]) "bool"))
+   Boolean)
+  #f)
+ : Str ⇒ "bool")
+
+;; --- fail
+
+(typecheck-fail
+ (resolve
+  (signature (a) (→ a Boolean))
+  Boolean)
+ #:with-msg "No matching instance")
+
+(typecheck-fail
+ (resolve
+  (instance
+   (signature (a) (→ a Boolean))
+   (λ ([x : Boolean]) #t))
+  Nat)
+ #:with-msg "No matching instance")
