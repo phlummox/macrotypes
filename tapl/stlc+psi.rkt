@@ -2,8 +2,8 @@
 ;; (extends "stlc+sub.rkt" #:except #%datum #:rename [#%app stlc:#%app])
 ;(extends "stlc+tup.rkt" #:except + #%datum and)
 ;(extends "stlc+cons.rkt" #:except + #%datum and)
-(reuse [#%datum stlc+occurrence:#%datum] current-Π Nat Bot Str Boolean #:from "stlc+occurrence.rkt")
-(extends "sysf.rkt" #:except #%datum +) ; load current-type=?
+(reuse [#%datum stlc+occurrence:#%datum] current-Π current-sub? Nat Bot Str Boolean #:from "stlc+occurrence.rkt")
+(extends "sysf.rkt" #:except #%datum + #:rename [#%app stlc:#%app]) ; load current-type=?
 
 ;; Parametric overloading.
 ;; - (signature (α) τ) : define overloadable function with type τ
@@ -95,27 +95,35 @@
  (define (⟦Σ⟧-add ⟦Σ⟧ τ e)
    (make-⟦Σ⟧ (cons (cons τ e) (⟦Σ⟧-map ⟦Σ⟧))))
 
- (define (⟦Σ⟧-mem? ⟦Σ⟧ τ)
-   (define τ=? (current-type=?))
+ ;; mem uses =?, and returns a boolean.
+ ;; If this returns true, runtime lookups will succeed (even if compile-time fails)
+ (define (⟦Σ⟧-mem? ⟦Σ⟧ τ [τ<=? (current-type=?)])
    (for/or ([τ+e (in-list (⟦Σ⟧-map ⟦Σ⟧))])
-     (τ=? τ (car τ+e))))
+     (τ<=? τ (car τ+e))))
 
  (define (⟦Σ⟧-init)
    (make-⟦Σ⟧ '()))
 
- (define (⟦Σ⟧-lookup ⟦Σ⟧ τ)
-   ;; TODO should be subtyping here
-   (define τ=? (current-type=?))
+ ;; lookup uses <=?, and returns the function
+ ;; if you want =?, override the parameter first
+ (define (⟦Σ⟧-lookup ⟦Σ⟧ τ [τ<=? (current-type=?)])
    (for/first ([τ+e (in-list (⟦Σ⟧-map ⟦Σ⟧))]
-               #:when (τ=? τ (car τ+e)))
+               #:when (τ<=? τ (car τ+e)))
      (cdr τ+e)))
 
  ;; Check that all the types (keys) are the same
  (define (⟦Σ⟧=? τ=? ⟦Σ⟧1 ⟦Σ⟧2)
    ;; idk if τ=? should be a parameter or not
-   (for/and ([τ1 (in-list (cannonize (map car (⟦Σ⟧-map ⟦Σ⟧1))))]
-             [τ2 (in-list (cannonize (map car (⟦Σ⟧-map ⟦Σ⟧2))))])
-     (τ=? τ1 τ2)))
+   (let loop ([τ1* (cannonize (map car (⟦Σ⟧-map ⟦Σ⟧1)))]
+              [τ2* (cannonize (map car (⟦Σ⟧-map ⟦Σ⟧2)))])
+     (cond
+      [(and (null? τ1*) (null? τ2*))
+       #t]
+      [(and (not (null? τ1*)) (not (null? τ2*)))
+       (and (τ=? (car τ1*) (car τ2*))
+            (loop (cdr τ1*) (cdr τ2*)))]
+      [else 
+       #f])))
 
  ;; Reflect an §-type to a syntax map, for uniformity
  (define (§->⟦Σ⟧ τ*)
@@ -276,16 +284,32 @@
                     (syntax->datum #'τ_Σ)
                     (syntax->datum #'τ_e)))])])
 
+(define-for-syntax (resolve/internal e τ τ<=?)
+  ;; TODO don't unfold the type to an →, instead [τ / α]
+  (syntax-parse (infer+erase e)
+   [(Σ (~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod)))
+    #:with τ+ ((current-type-eval) τ)
+    (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
+    (unless (⟦Σ⟧-mem? ⟦Σ⟧ #'τ+ τ<=?)
+      (resolve-error τ "No matching instance."))
+    ;; Try resolving statically, else use the actual term Σ as a dictionary
+    (define f (or (⟦Σ⟧-lookup ⟦Σ⟧ #'τ+ τ<=?) #'Σ))
+    (⊢ #,f
+      ;; TODO use subst on the type, don't unfold into an →
+      : (→ τ+ τ_cod))]))
+
 (define-typed-syntax resolve
   [(_ e τ)
-   ;; TODO don't unfold the type to an →, instead [τ / α]
-   #:with [Σ (~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod))] (infer+erase #'e)
-   #:with τ+ ((current-type-eval) #'τ)
-   (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
-   (unless (⟦Σ⟧-mem? ⟦Σ⟧ #'τ+)
-     (resolve-error #'τ "No matching instance."))
-   ;; Try resolving statically, else use the actual term Σ as a dictionary
-   (define f (or (⟦Σ⟧-lookup ⟦Σ⟧ #'τ+) #'Σ))
-   (⊢ #,f
-      ;; TODO use subst on the type, don't unfold into an →
-      : (→ τ+ τ_cod))])
+   (resolve/internal #'e #'τ (current-type=?))])
+
+;; Hijack application to typecheck
+(define-typed-syntax app/tc #:export-as #%app
+  [(_ e_1 e_2)
+   ;; Check that e_1 is a ψ-type after expanding
+   #:with [e_1+ τ_1+] (infer+erase #'e_1)
+   #:when (ψ? #'τ_1+)
+   #:with [e_2+ τ_2+] (infer+erase #'e_2)
+   ;; Try resolving, then #%app like normal
+   #`(stlc:#%app #,(resolve/internal #'e_1+ #'τ_2+ (current-sub?)) e_2+)]
+  [(_ e* ...)
+   #'(stlc:#%app e* ...)])
