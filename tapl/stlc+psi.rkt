@@ -95,6 +95,14 @@
  (define (⟦Σ⟧-add ⟦Σ⟧ τ e)
    (make-⟦Σ⟧ (cons (cons τ e) (⟦Σ⟧-map ⟦Σ⟧))))
 
+;; Update the type τ with the new map Σ
+;; TODO does not check "τ consistent with Σ"
+;;      better to weave this into ⟦Σ⟧-add ?
+ (define (⟦Σ⟧->type τ Σ)
+   (syntax-parse τ
+    [(~ψ A _ τ)
+     #`(ψ A #,(assign-type #`#,Σ #'#%type) τ)]))
+
  ;; mem uses =?, and returns a boolean.
  ;; If this returns true, runtime lookups will succeed (even if compile-time fails)
  (define (⟦Σ⟧-mem? ⟦Σ⟧ τ [τ<=? (current-type=?)])
@@ -204,9 +212,8 @@
      (error 'syntax->struct (format "expected a nested syntax object, got '~a'" e+)))
    (syntax-e e+))
 
- ;; TODO add subtyping
  (current-type=? ψ=?)
- (current-typecheck-relation (current-type=?))
+ (current-typecheck-relation (current-sub?))
 )
 
 ;; =============================================================================
@@ -254,23 +261,19 @@
    ;; τ_Σ should be a ψ type
    ;; τ_e should be an arrow (for now, really it should match τ_α)
    (syntax-parse #'(τ_Σ τ_e)
-    [((~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod1))
-      (~→ τ_dom τ_cod2))
+    [((~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod_template))
+      (~→ τ_dom τ_cod_actual))
      (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
-     (define τ=? (current-type=?))
      ;; Assert τ_dom is new
      (when (⟦Σ⟧-mem? ⟦Σ⟧ #'τ_dom)
        (instance-error (format "Duplicate instance at type '~a'" (syntax->datum #'τ_dom))))
      ;; Unify codomains (just ignore τ_α for now)
-     (unless (τ=? #'τ_cod1 #'τ_cod2)
+     (unless ((current-typecheck-relation) #'τ_cod_actual #'τ_cod_template)
        (instance-error (format "Cannot unify '~a' with template '~a'"
-                               (syntax->datum #'(→ τ_dom τ_cod2))
-                               (syntax->datum #'(→ τ_α τ_cod1)))))
-     
+                               (syntax->datum #'(→ τ_dom τ_cod_actual))
+                               (syntax->datum #'(→ τ_α τ_cod_template)))))
      (⊢ (Σ-add Σ+ #,((current-Π) #'τ_dom) e+)
-        ;; (Hm, maybe just get type from the updated Σ
-        ;; Just add τ_dom to the type --- TODO use a helper function
-        : (ψ (α) #,(assign-type #`#,(⟦Σ⟧-add ⟦Σ⟧ #'τ_dom #'e+) #'#%type) (→ τ_α τ_cod1)))]
+        : #,(⟦Σ⟧->type #'τ_Σ (⟦Σ⟧-add ⟦Σ⟧ #'τ_dom #'e+)))]
     ;; Error cases
     [(_
       (~→ τ* ...))

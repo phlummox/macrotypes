@@ -211,5 +211,16 @@
  #:with-msg "No matching instance")
 
 ;; -----------------------------------------------------------------------------
-;; -- dynamic resolve
+;; -- lambda
+
+(check-type
+ ((λ ([enum : (ψ (A) (§ Int Boolean) (→ A Int))])
+     (enum 4))
+  (instance 
+   (instance
+    (signature (A) (→ A Int))
+    (λ ([x : Boolean]) 0))
+   (λ ([x : Int]) 1)))
+ : Int)
+
 
