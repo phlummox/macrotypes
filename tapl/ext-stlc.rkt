@@ -21,7 +21,9 @@
 (define-base-type String)
 
 (define-typed-syntax #%datum
-  [(_ . b:boolean) (⊢ (#%datum . b) : Bool)]
+  [(_ . b:boolean)
+   --------------------
+   ⊢ (#%datum . b) : Bool]
   [(_ . s:str) (⊢ (#%datum . s) : String)]
   [(_ . x) #'(stlc+lit:#%datum . x)])
 
@@ -34,53 +36,60 @@
 
 (define-typed-syntax and
   [(_ e1 e2)
-   #:with e1- (⇑ e1 as Bool)
-   #:with e2- (⇑ e2 as Bool)
-   (⊢ (and e1- e2-) : Bool)])
+   ⊢ e1 ≫ e1- : Bool
+   ⊢ e2 ≫ e2- : Bool
+   --------------------
+   ⊢ (and e1- e2-) : Bool])
   
 (define-typed-syntax or
   [(_ e1 e2)
-   #:with e1- (⇑ e1 as Bool)
-   #:with e2- (⇑ e2 as Bool)
-   (⊢ (or e1- e2-) : Bool)])
+   ⊢ e1 ≫ e1- : Bool
+   ⊢ e2 ≫ e2- : Bool
+   --------------------
+   ⊢ (or e1- e2-) : Bool])
 
 (begin-for-syntax 
   (define current-join (make-parameter (λ (x y) x))))
 (define-typed-syntax if
   [(_ e_tst e1 e2)
-   #:with e_tst- (⇑ e_tst as Bool)
-   #:with (e1- τ1) (infer+erase #'e1)
-   #:with (e2- τ2) (infer+erase #'e2)
+   ⊢ e_tst ≫ e_tst- : Bool
+   ⊢ e1 ≫ e1- : τ1
+   ⊢ e2 ≫ e2- : τ2
    #:with τ-out ((current-join) #'τ1 #'τ2)
-   #:fail-unless (and (typecheck? #'τ1 #'τ-out)
-                      (typecheck? #'τ2 #'τ-out))
-                  (format "branches have incompatible types: ~a and ~a"
-                          (type->str #'τ1) (type->str #'τ2))
-   (⊢ (if e_tst- e1- e2-) : τ-out)])
+   τ1 ⊑ τ-out
+   #:with-msg "first if branch has bad type"
+   τ2 ⊑ τ-out
+   #:with-msg "second if branch has bad type"
+   --------------------
+   ⊢ (if e_tst- e1- e2-) : τ-out])
 
 (define-base-type Unit)
 (define-primop void : (→ Unit))
 
 (define-typed-syntax begin
   [(_ e_unit ... e)
-   #:with (e_unit- ...) (⇑s (e_unit ...) as Unit)
-   #:with (e- τ) (infer+erase #'e)
-   (⊢ (begin e_unit- ... e-) : τ)])
+   ⊢ e_unit ≫ e_unit- : Unit ...
+   ⊢ e ≫ e- : τ
+   --------------------
+   ⊢ (begin e_unit- ... e-) : τ])
 
-(define-typed-syntax ann
-  #:datum-literals (:)
-  [(_ e : ascribed-τ:type)
-   #:with (e- τ) (infer+erase #'e)
-   #:fail-unless (typecheck? #'τ #'ascribed-τ.norm)
-                 (format "~a does not have type ~a\n"
-                         (syntax->datum #'e) (syntax->datum #'ascribed-τ))
-   (⊢ e- : ascribed-τ)])
+(define-typed-syntax ann 
+  [(_ e (~datum :) ascribed-τ:type)
+   ⊢ e ≫ e- : τ
+   τ ⊑ ascribed-τ.norm
+   #:with-msg
+   (format "~a does not have type ~a\n"
+           (syntax->datum #'e) (syntax->datum #'ascribed-τ))
+   --------------------
+   ⊢ e- : ascribed-τ])
 
 (define-typed-syntax let/tc #:export-as let
-  [(_ ([x e] ...) e_body)
-   #:with ((e- τ) ...) (infers+erase #'(e ...))
-   #:with ((x- ...) e_body- τ_body) (infer/ctx+erase #'([x τ] ...) #'e_body)
-   (⊢ (let ([x- e-] ...) e_body-) : τ_body)])
+  [(_ (~and bvs ([x e] ...)) e_body)
+   ⊢ e ≫ e- : τ ...
+   ([x τ] ...) ⊢ e_body ≫ e_body- : τ_body
+   #:with (x- ...) #'xs-
+   --------------------
+   ⊢ (let ([x- e-] ...) e_body-) : τ_body])
 
 (define-typed-syntax let*/tc #:export-as let*
   [(_ () e_body) #'e_body]
@@ -89,19 +98,23 @@
 
 (define-typed-syntax letrec
   [(_ ([b:type-bind e] ...) e_body)
-   #:with ((x- ...) (e- ... e_body-) (τ ... τ_body))
-          (infers/ctx+erase #'(b ...) #'(e ... e_body))
-   #:fail-unless (typechecks? #'(b.type ...) #'(τ ...))
-                 (string-append
-                  "type check fail, args have wrong type:\n"
-                  (string-join
-                   (stx-map
-                    (λ (e τ τ-expect)
-                      (format
-                       "~a has type ~a, expected ~a"
-                       (syntax->datum e) (type->str τ) (type->str τ-expect)))
-                    #'(e ...) #'(τ ...) #'(b.type ...))
-                   "\n"))
-  (⊢ (letrec ([x- e-] ...) e_body-) : τ_body)])
-
+   #:with (all-e ...) #'(e ... e_body) ; consolidate so they get the same ctx
+   (b ...) ⊢ all-e ≫ all-e- : all-τ ...
+   #:with (e- ... e_body-) #'(all-e- ...)
+   #:with (τ ... τ_body) #'(all-τ ...)
+   #:with (x- ...) #'xs-
+   b.type ⊑ τ ...
+   #:with-msg
+   (string-append
+    "type check fail, args have wrong type:\n"
+    (string-join
+     (stx-map
+      (λ (e τ τ-expect)
+        (format
+         "~a has type ~a, expected ~a"
+         (syntax->datum e) (type->str τ) (type->str τ-expect)))
+      #'(e ...) #'(τ ...) #'(b.type ...))
+     "\n"))
+   --------------------
+   ⊢ (letrec ([x- e-] ...) e_body-) : τ_body])
      

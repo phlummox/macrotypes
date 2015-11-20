@@ -71,6 +71,7 @@
   [(_ bvs:type-ctx e)
    ;#:with (xs- e- τ_res) (infer/ctx+erase #'bvs #'e)
    bvs ⊢ e ≫ e- : τ_res
+   --------------------
    ⊢ (λ xs- e-) : (→ bvs.type ... τ_res)])
 
 (define-typed-syntax #%app
@@ -96,4 +97,5 @@
                   (format "Expected: ~a arguments with type(s): "
                           (stx-length #'(τ_in ...)))
                   (string-join (stx-map type->str #'(τ_in ...)) ", "))
+   --------------------
   ⊢ (#%app e_fn- e_arg- ...) : τ_out])

@@ -1,6 +1,6 @@
 #lang racket/base
 (require
-  (for-syntax (except-in racket extends) (only-in srfi/13 string-prefix?)
+  (for-syntax (except-in racket extends)
               syntax/parse racket/syntax syntax/stx racket/stxparam
               "stx-utils.rkt"
               syntax/parse/debug)
@@ -52,6 +52,12 @@
   ;; (ie ((current-typecheck-relation) τ1 τ2) => true
   (define (process-clauses clauses)
     (syntax-parse clauses #:datum-literals (≫ : ⊑ ⊢)
+      ; with environment and dots
+      ; unhygienic xs-
+      [(Γ ⊢ e-typed ≫ e-erased : τ_e (~and (~literal ...) dots) . rst)
+       #:with xs- (datum->syntax #'e-erased 'xs-)
+       #`(#:with [xs- (e-erased dots) (τ_e dots)] (infers/ctx+erase #'Γ #'(e-typed dots))
+          #,@(process-clauses #'rst))]
       ; with environment
       [(Γ ⊢ e-typed ≫ e-erased : τ_e . rst)
        #:with xs- (datum->syntax #'e-erased 'xs-)
@@ -61,21 +67,53 @@
       [(⊢ e-typed ≫ e-erased : (tycon . tyargs) . rst)
        #`(#:with [e-erased tyargs] (⇑ e-typed as tycon)
           #,@(process-clauses #'rst))]
+      ; basety + dots
+      [(⊢ e-typed ≫ e-erased : basety:id (~and (~literal ...) dots) . rst)
+       #:with (~and basety+ (app _))
+       (with-handlers ([exn:fail:syntax:unbound? (λ (e) #'got-unbound-var)]) ; drop unbound var exception
+         (local-expand #'basety 'expression null))
+       #:when (not (false? (syntax-property #'basety+ 'type)))
+       #`(#:with (e-erased dots) (⇑s (e-typed dots) as basety)
+          #,@(process-clauses #'rst))]
+      ; basety
+      [(⊢ e-typed ≫ e-erased : basety:id . rst)
+       #:with (~and basety+ (app _))
+       (with-handlers ([(λ _ #t) (λ (e) #'got-unbound-var)]) ; drop unbound var exception
+         (local-expand #'basety 'expression null))
+       #:when (not (false? (syntax-property #'basety+ 'type)))
+       #`(#:with e-erased (⇑ e-typed as basety)
+          #,@(process-clauses #'rst))]
       ; non-tycon + dots
       [(⊢ e-typed ≫ e-erased : τ_e (~and (~literal ...) dots) . rst)
        #`(#:with ([e-erased τ_e] dots) (infers+erase #'(e-typed dots))
           #,@(process-clauses #'rst))]
+      ; arbitrary ty var
+      [(⊢ e-typed ≫ e-erased : tvar:id . rst)
+       #`(#:with [e-erased tvar] (infer+erase #'e-typed)
+          #,@(process-clauses #'rst))]
       [(τ1 ⊑ τ2 (~and (~literal ...) dots) #:with-msg msg . rst)
        #`(#:fail-unless (typechecks? #'(τ1 dots) #'(τ2 dots)) msg
-          #,@(process-clauses #'rst))]              
+          #,@(process-clauses #'rst))]
+      ; no dots
+      [(τ1 ⊑ τ2 #:with-msg msg . rst)
+       #`(#:fail-unless (typecheck? #'τ1 #'τ2) msg
+          #,@(process-clauses #'rst))]
+      ; propagate #:with
+      [(#:with pat exp . rst) #`(#:with pat exp #,@(process-clauses #'rst))]
       [_ clauses])))
 
+(begin-for-syntax
+  (define-syntax-class dashes
+    (pattern ds
+             #:when (regexp-match #rx"^\\-+" (symbol->string (syntax->datum #'ds))))))
+
 (define-syntax (define-typed-syntax stx)
-  (syntax-parse stx #:datum-literals (⊢ :)
+  (syntax-parse stx #:datum-literals (⊢ : --------------------)
     [(_ name:id #:export-as out-name:id
         [pat
          ;(~seq e-typed ≫ e-erased : τ_e)
          clause-content ...
+         --------------------
          ⊢ e : τ]
         stx-parse-clause ...)
      #`(begin
@@ -141,9 +179,9 @@
                           [excluded (map symbol->string (syntax->datum #'(x ... new ...)))])
                      (λ (name)
                        (define out-name
-                         (or (and (string-prefix? pre-str name)
+                         (or (and (string-prefix? name pre-str)
                                   (drop-pre name))
-                             (and (string-prefix? int-pre-str name)
+                             (and (string-prefix? name int-pre-str)
                                   (drop-int-pre name))
                              name))
                        (and (not (member out-name excluded)) out-name)))
