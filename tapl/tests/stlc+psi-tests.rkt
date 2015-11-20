@@ -96,8 +96,8 @@
            (λ ([x : Int] [y : Int]) "hi"))
  #:with-msg "non-overloadable type") ;; bad error message
 
-;; Too-small carrier
-(check-not-type
+;; Okay, because subtyping
+(check-type
  (instance (signature (A) (→ A Boolean))
            (λ ([x : Int]) #t))
  : (ψ (B) (§) (→ B Boolean)))
@@ -223,4 +223,48 @@
    (λ ([x : Int]) 1)))
  : Int)
 
+(check-type-and-result
+ ((λ ([enum : (ψ (A) (§ Int Boolean) (→ A Int))])
+     (enum 4))
+  (instance 
+   (instance
+    (signature (A) (→ A Int))
+    (λ ([x : Boolean]) 0))
+   (λ ([x : Int]) 1)))
+ : Int ⇒ 1)
 
+(check-type-and-result
+ ((λ ([enum : (ψ (A) (§ Int Boolean) (→ A Int))])
+     (enum #t))
+  (instance 
+   (instance
+    (signature (A) (→ A Int))
+    (λ ([x : Boolean]) 0))
+   (λ ([x : Int]) 1)))
+ : Int ⇒ 0)
+
+;; --- less-specific arg type
+(check-type-and-result
+ ((λ ([enum : (ψ (A) (§ Int) (→ A Int))])
+     (enum 4))
+  (instance 
+   (instance
+    (signature (A) (→ A Int))
+    (λ ([x : Boolean]) 0))
+   (λ ([x : Int]) 1)))
+ : Int ⇒ 1)
+
+;; --- less-specific result
+(check-type-and-result
+ ((λ ([enum : (ψ (A) (§ Int Boolean) (→ A Num))])
+     (enum 4))
+  (instance 
+   (instance
+    (signature (A) (→ A Int))
+    (λ ([x : Boolean]) 0))
+   (λ ([x : Int]) 1)))
+ : Num ⇒ 1)
+
+;; lambda, resolve S=t to a plain arrow
+;; lambda, infer use (via flow) on a poly, resolve to plain arrow
+;; var-arity, one arg instantiates the rest

@@ -2,7 +2,7 @@
 ;; (extends "stlc+sub.rkt" #:except #%datum #:rename [#%app stlc:#%app])
 ;(extends "stlc+tup.rkt" #:except + #%datum and)
 ;(extends "stlc+cons.rkt" #:except + #%datum and)
-(reuse [#%datum stlc+occurrence:#%datum] current-Π current-sub? Nat Bot Str Boolean #:from "stlc+occurrence.rkt")
+(reuse [#%datum stlc+occurrence:#%datum] current-Π current-sub? Nat Num Bot Str Boolean #:from "stlc+occurrence.rkt")
 (extends "sysf.rkt" #:except #%datum + #:rename [#%app stlc:#%app]) ; load current-type=?
 
 ;; Parametric overloading.
@@ -51,6 +51,11 @@
 ;; =============================================================================
 ;; === Type->Expr maps
 
+(define *log-dynamic-resolve* (make-parameter #t))
+(define-syntax-rule (log-dynamic-resolve Σ arg)
+  (when (*log-dynamic-resolve*)
+    (printf "[DYN.RESOLVE] numcases: ~a, arg: ~a\n" (Σ-count Σ) arg)))
+
 ;; § is compile-time, Σ lives at runtime
 
 (struct Σ (
@@ -59,11 +64,17 @@
    #:constructor-name make-Σ
    #:property prop:procedure
    (lambda (self arg)
+     (log-dynamic-resolve self arg)
+     ;; Lookup finds a function, we apply this function to the lookup argument.
+     ;; (Guess we could make this tail recursive)
      (define fn (Σ-lookup self arg))
      (fn arg)))
 
 (define (Σ-add Σ τ e)
   (make-Σ (cons (cons τ e) (Σ-map Σ))))
+
+(define (Σ-count Σ)
+  (length (Σ-map Σ)))
 
 (define (Σ-init)
   (make-Σ '()))
@@ -136,6 +147,11 @@
  ;; Reflect an §-type to a syntax map, for uniformity
  (define (§->⟦Σ⟧ τ*)
    (make-⟦Σ⟧ (for/list ([τ (in-list (cannonize τ*))]) (cons τ #f))))
+
+ ;; Calling Σ->§ would be symmetric, but not as useful.
+ (define (⟦Σ⟧->τ* ⟦Σ⟧)
+   (map car (⟦Σ⟧-map ⟦Σ⟧)))
+
 )
 
 ;; =============================================================================
@@ -163,6 +179,12 @@
    (sort (remove-duplicates τ* (current-type=?))
          symbol<?
          #:key τ->symbol))
+
+ ;; True if one list of types is a prefix of another.
+ (define (subset? x* y* #:leq [cmp (current-typecheck-relation)])
+   (for/and ([x (in-list x*)])
+     (for/or ([y (in-list y*)])
+       (cmp x y))))
 )
 
 ;; τ eval+equality
@@ -201,6 +223,42 @@
                    ((current-type-eval) #`(∀ (β) τ_β))))]
         [_ (τ=? τ1 τ2)]))))
 
+ ;; TODO doesn't belong here
+ (define ∀-sub?
+   (let ([sub? (current-sub?)])
+     (lambda (τ1 τ2)
+       (syntax-parse (list τ1 τ2)
+        [((~∀ (x ...) t1)
+          (~∀ (y ...) t2))
+         #:with bot* (stx-map (lambda (_x) #'Bot) #'(x ...))
+         (and (stx-length=? #'(x ...) #'(y ...))
+              ((current-sub?) (substs #'bot* #'(x ...) #'t1)
+                              (substs #'bot* #'(y ...) #'t2)))]
+       [_
+        (sub? τ1 τ2)]))))
+
+ (current-sub? ∀-sub?)
+
+ (define ψ-sub?
+   (let ([sub? (current-sub?)])
+     (lambda (τ1 τ2)
+       (syntax-parse (list τ1 τ2)
+        [((~ψ (A*:id ...)
+              ⟦Σ⟧_A-stx
+              τ_A)
+          (~ψ (B*:id ...)
+              ⟦Σ⟧_B-stx
+              τ_B))
+         (define ⟦Σ⟧_A (syntax->struct #'⟦Σ⟧_A-stx))
+         (define ⟦Σ⟧_B (syntax->struct #'⟦Σ⟧_B-stx))
+         ;; Compatible templates (also, same number of variables)
+         (and ((current-sub?)
+               ((current-type-eval) #'(∀ (A* ...) τ_A))
+               ((current-type-eval) #'(∀ (B* ...) τ_B)))
+              (subset? (⟦Σ⟧->τ* ⟦Σ⟧_B) (⟦Σ⟧->τ* ⟦Σ⟧_A) #:leq (current-sub?)))]
+        [_
+         (sub? τ1 τ2)]))))
+
  (define (syntax->struct stx)
    (unless (syntax? stx)
      (error 'syntax->struct (format "expected a syntax object, got '~a'" stx)))
@@ -213,7 +271,8 @@
    (syntax-e e+))
 
  (current-type=? ψ=?)
- (current-typecheck-relation (current-sub?))
+ (current-sub? ψ-sub?)
+ (current-typecheck-relation ψ-sub?)
 )
 
 ;; =============================================================================
