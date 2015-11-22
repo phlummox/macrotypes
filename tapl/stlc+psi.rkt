@@ -34,7 +34,6 @@
    #:when (⟦Σ⟧? (syntax-e #'n))
    (⊢ (#%datum . n) : #%type)]
   [(_ . x) #'(stlc+occurrence:#%datum . x)])
-   
 
 ;; =============================================================================
 ;; === ψ types
@@ -230,10 +229,9 @@
        (syntax-parse (list τ1 τ2)
         [((~∀ (x ...) t1)
           (~∀ (y ...) t2))
-         #:with bot* (stx-map (lambda (_x) #'Bot) #'(x ...))
          (and (stx-length=? #'(x ...) #'(y ...))
-              ((current-sub?) (substs #'bot* #'(x ...) #'t1)
-                              (substs #'bot* #'(y ...) #'t2)))]
+              ((current-sub?) (substs #'(x ...) #'(x ...) #'t1)
+                              (substs #'(x ...) #'(y ...) #'t2)))]
        [_
         (sub? τ1 τ2)]))))
 

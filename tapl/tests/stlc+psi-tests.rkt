@@ -1,6 +1,89 @@
 #lang s-exp "../stlc+psi.rkt"
 (require "rackunit-typechecking.rkt")
 
+;; -----------------------------------------------------------------------------
+;; ∀-sub? tests
+
+;; --- succeed
+
+(check-type
+ (Λ (a) 3)
+ : (∀ (t) Int))
+
+(check-type
+ (Λ (a) 3)
+ : (∀ (t) Num))
+
+(check-type
+ (Λ (a) (λ ([x : a]) x))
+ : (∀ (t) (→ Bot t)))
+
+(check-type
+  (Λ (a) (λ ([x : Int]) x))
+  : (∀ (t) (→ Int Int)))
+
+(check-type
+  (Λ (a) (λ ([x : Int]) x))
+  : (∀ (t) (→ Int Num)))
+
+(check-type
+  (Λ (a) (λ ([x : Int]) x))
+  : (∀ (t) (→ Nat Num)))
+
+(check-type
+  (Λ (a) (λ ([x : a]) 3))
+  : (∀ (A) (→ A Int)))
+
+(check-type
+  (Λ (a) (λ ([x : a]) 3))
+  : (∀ (A) (→ A Num)))
+
+(check-type
+  (Λ (a) (λ ([x : Int] [y : a]) y))
+  : (∀ (A) (→ Nat A A)))
+
+(check-type
+  (Λ (a) (λ ([x : Int]) (Λ (b) (λ ([y : b] [x : a]) x))))
+  : (∀ (A) (→ Int (∀ (B) (→ B A A)))))
+
+(check-type
+  (Λ (a) (λ ([x : Int]) (Λ (b) (λ ([y : b] [x : a]) x))))
+  : (∀ (A) (→ Nat (∀ (B) (→ B A A)))))
+
+;; --- fail
+
+(check-not-type
+ (Λ (a) (λ ([x : a]) x))
+ : (∀ (t) (→ Int t)))
+
+(check-not-type
+  (Λ (a) (λ ([x : Int]) x))
+  : (∀ (t) (→ Int Nat)))
+
+(check-not-type
+ (Λ (a) (λ ([x : a]) x))
+ : (∀ (t) (→ t Int)))
+
+(check-not-type
+  (Λ (a) (λ ([x : Int]) x))
+  : (∀ (t) (→ Num Nat)))
+
+(check-not-type
+  (Λ (a) (λ ([x : a]) 3))
+  : (∀ (A) (→ A A)))
+
+(check-not-type
+  (Λ (a) (λ ([x : a]) -3))
+  : (∀ (A) (→ A Nat)))
+
+(check-not-type
+  (Λ (a) (λ ([x : Int] [y : a]) y))
+  : (∀ (A) (→ Num A A)))
+
+(check-not-type
+  (Λ (a) (λ ([x : Int]) (Λ (b) (λ ([y : b] [x : a]) x))))
+  : (∀ (A) (→ Num (∀ (B) (→ B A A)))))
+
 ;; ----------------------------------------------------------------------------------------
 ;; -- signature
 
@@ -14,6 +97,8 @@
 (check-type
  (signature (a) (→ a Boolean))
  : (ψ (b) (§) (→ b Boolean)))
+
+;; TODO more shapes
 
 ;; --- fail
 
