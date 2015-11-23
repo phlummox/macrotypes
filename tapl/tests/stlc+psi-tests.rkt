@@ -179,7 +179,7 @@
 (typecheck-fail
  (instance (signature (a) (→ a Str))
            (λ ([x : Int] [y : Int]) "hi"))
- #:with-msg "non-overloadable type") ;; bad error message
+ #:with-msg "Different length domains")
 
 ;; Okay, because subtyping
 (check-type
@@ -199,18 +199,15 @@
            (λ ([x : Int]) #t))
  : (ψ (B) (§ Int Boolean) (→ B Boolean)))
 
-;; TODO why "improper usage of ψ" ?
-;; Missing type variables
-;; (check-not-type
-;;  (instance (signature (A) (→ A Boolean))
-;;            (λ ([x : Int]) #t))
-;;  : (ψ () (§ Int) (→ B Boolean)))
+;; Missing type variables = bad use of constructor
+(typecheck-fail
+ (λ ([f : (ψ () (§ Int) (→ Int Int))]) 3)
+ #:with-msg "Improper usage of type constructor")
 
 ;; Too many type variables
-;; (check-not-type
-;;  (instance (signature (A) (→ A Boolean))
-;;            (λ ([x : Int]) #t))
-;;  : (ψ (A B C) (§ Int) (→ B Boolean)))
+(typecheck-fail
+ (λ ([x : (ψ (A B C) (§ Int) (→ B Boolean))]) 1)
+ #:with-msg "Improper usage")
 
 ;; -----------------------------------------------------------------------------
 ;; -- resolve
@@ -277,8 +274,6 @@
   1)
  : Str ⇒ "num")
 
-;; ;; TODO λ
-
 ;; --- fail
 
 (typecheck-fail
@@ -295,6 +290,14 @@
   Nat)
  #:with-msg "No matching instance")
 
+(typecheck-fail
+ ((instance
+   (instance (signature (α) (→ α Str))
+             (λ ([x : Nat]) "nat"))
+   (λ ([x : Boolean]) "bool"))
+  -1)
+ #:with-msg "No matching instance")
+
 ;; -----------------------------------------------------------------------------
 ;; -- lambda
 
@@ -307,6 +310,11 @@
     (λ ([x : Boolean]) 0))
    (λ ([x : Int]) 1)))
  : Int)
+
+(check-type
+ (λ ([enum : (ψ (A) (§ Int) (→ A Int))])
+    (enum 4))
+ : (→ (ψ (A) (§ Int) (→ A Int)) Int))
 
 (check-type-and-result
  ((λ ([enum : (ψ (A) (§ Int Boolean) (→ A Int))])
@@ -350,6 +358,218 @@
    (λ ([x : Int]) 1)))
  : Num ⇒ 1)
 
-;; lambda, resolve S=t to a plain arrow
-;; lambda, infer use (via flow) on a poly, resolve to plain arrow
-;; var-arity, one arg instantiates the rest
+;; --- some failures
+
+(typecheck-fail
+ (λ ([enum : (ψ (A) (§ Boolean) (→ A Int))])
+    (enum 4))
+ #:with-msg "No matching instance")
+
+;; Annotation mismatch, even thought 'Boolean' is never used
+(typecheck-fail
+ ((λ ([enum : (ψ (A) (§ Boolean Int) (→ A Int))])
+     (enum 4))
+  (instance 
+    (signature (A) (→ A Int))
+   (λ ([x : Int]) 1)))
+ #:with-msg "Arguments to function")
+
+(typecheck-fail
+ (λ ([enum : (ψ (A) (§ Nat) (→ A Int))])
+    (enum -4))
+ #:with-msg "No matching instance")
+
+;; -----------------------------------------------------------------------------
+
+(check-type
+  (signature (A) (→ A A Boolean))
+  : (ψ (A) (§) (→ A A Boolean)))
+
+(check-type
+  (instance 
+   (signature (A) (→ A A Boolean))
+   (λ ([x : Int] [y : Int]) #t))
+  : (ψ (A) (§ Int) (→ A A Boolean)))
+
+(check-type
+ (resolve
+  (instance 
+   (signature (A) (→ A A Boolean))
+   (λ ([x : Int] [y : Int]) #t))
+  Int)
+ : (→ Int Int Boolean))
+
+(check-type
+ (resolve
+  (instance
+   (instance 
+    (signature (A) (→ A A Boolean))
+    (λ ([x : Int] [y : Int]) #t))
+   (λ ([x : Boolean] [y : Boolean]) x))
+  Int)
+ : (→ Int Int Boolean))
+
+(check-type-and-result
+ ((resolve
+   (instance
+    (instance 
+     (signature (A) (→ A A Boolean))
+     (λ ([x : Int] [y : Int]) #t))
+    (λ ([x : Boolean] [y : Boolean]) x))
+   Boolean) #t #f)
+ : Boolean
+ ⇒ #t)
+
+(check-type-and-result
+ ((resolve
+   (instance
+    (instance 
+     (signature (A) (→ A A Boolean))
+     (λ ([x : Int] [y : Int]) #t))
+    (λ ([x : Boolean] [y : Boolean]) x))
+   Boolean) #f #t)
+ : Boolean
+ ⇒ #f)
+
+;; --- eq fails
+
+(typecheck-fail
+  (instance 
+   (signature (A) (→ A A Boolean))
+   (λ ([x : Int] [y : Boolean]) #t))
+  #:with-msg "Incompatible types")
+
+(typecheck-fail
+  (instance 
+   (signature (A) (→ A A Boolean))
+   (λ ([x : Int] [y : Int]) x))
+  #:with-msg "Cannot unify")
+
+(typecheck-fail
+ (resolve
+  (instance 
+   (signature (A) (→ A A Boolean))
+   (λ ([x : Int] [y : Int]) #t))
+  Boolean)
+ #:with-msg "No matching instance")
+
+;; --- types in signature may be replaced with <:, rather than strict equals
+
+(check-type
+  (instance
+   (signature (α) (→ α Int Int Boolean))
+   (λ ([a : Num] [b : Int] [c : Int]) #f))
+  : (ψ (α) (§ Num) (→ α Int Int Boolean)))
+
+(check-type
+  (instance
+   (signature (α) (→ α Int Int Boolean))
+   (λ ([a : Num] [b : Num] [c : Int]) #f))
+  : (ψ (α) (§ Num) (→ α Int Int Boolean)))
+
+(check-type
+  (instance
+   (signature (α) (→ α Int Int Boolean))
+   (λ ([a : Num] [b : Int] [c : Num]) #f))
+  : (ψ (α) (§ Num) (→ α Int Int Boolean)))
+
+(typecheck-fail
+  (instance
+   (signature (α) (→ α Int Int Boolean))
+   (λ ([a : Num] [b : Nat] [c : Nat]) #f))
+  #:with-msg "does not match signature")
+
+;; -- overload at constructors (not simple) types
+
+(check-type
+ (instance
+  (signature (α) (→ α Int Int))
+  (λ ([f : (→ Int Int)] [x : Int]) (f x)))
+ : (ψ (α) (§ (→ Int Int)) (→ α Int Int)))
+
+(check-type
+ ((resolve
+   (instance
+    (instance
+     (signature (α) (→ α Int Int))
+     (λ ([f : (→ Int Int)] [x : Int]) (f x)))
+    (λ ([x : Boolean] [y : Int]) -1))
+   (→ Int Int)) (λ ([x : Int]) x) 5)
+  : Int
+  ⇒ 5)
+
+;; #%app resolve
+(check-type-and-result
+ ((instance
+    (instance 
+     (signature (A) (→ A A Boolean))
+     (λ ([x : Int] [y : Int]) #t))
+    (λ ([x : Boolean] [y : Boolean]) x))
+   #f #t)
+ : Boolean
+ ⇒ #f)
+
+;; dynamic resolve
+(check-type-and-result
+ ((λ ([f : (ψ (B) (§ Boolean) (→ B B Boolean))])
+     (f #f #t))
+  (instance
+   (instance 
+    (signature (A) (→ A A Boolean))
+    (λ ([x : Int] [y : Int]) #t))
+   (λ ([x : Boolean] [y : Boolean]) x)))
+ : Boolean
+ ⇒ #f)
+
+(check-type-and-result
+ ((λ ([x : (ψ (A) (§ (→ Int Int)) (→ A Int Int))])
+     ((resolve x (→ Int Int)) (λ ([y : Int]) y) 5))
+  (instance
+   (instance
+    (signature (α) (→ α Int Int))
+    (λ ([f : (→ Int Int)] [x : Int]) (f x)))
+   (λ ([x : Boolean] [y : Int]) -1)))
+ : Int
+ ⇒ 5)
+
+;; dynamic resolve with subtyping
+(check-type-and-result
+ ((λ ([f : (ψ (B) (§ Int) (→ B B Boolean))])
+     (f 1 2))
+  (instance
+   (instance 
+    (signature (A) (→ A A Boolean))
+    (λ ([x : Int] [y : Int]) #t))
+   (λ ([x : Boolean] [y : Boolean]) x)))
+ : Boolean
+ ⇒ #t)
+
+(check-type-and-result
+ ((λ ([f : (ψ (B) (§ Nat) (→ B B Boolean))])
+     (f 1 2))
+  (instance
+   (instance 
+    (signature (A) (→ A A Boolean))
+    (λ ([x : Nat] [y : Nat]) #t))
+   (λ ([x : Boolean] [y : Boolean]) x)))
+ : Boolean
+ ⇒ #t)
+
+(typecheck-fail
+ ((λ ([f : (ψ (B) (§ Nat) (→ B B Boolean))])
+     (f -1 -2))
+  (instance
+   (instance 
+    (signature (A) (→ A A Boolean))
+    (λ ([x : Nat] [y : Nat]) #t))
+   (λ ([x : Boolean] [y : Boolean]) x)))
+ #:with-msg "No matching instance")
+
+(check-type-and-result
+ ((λ ([f : (ψ (B) (§ Int) (→ B B Boolean))])
+     (f -1 2))
+  (instance
+   (signature (A) (→ A A Boolean))
+   (λ ([x : Int] [y : Int]) #t)))
+ : Boolean
+ ⇒ #t)

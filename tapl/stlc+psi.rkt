@@ -13,24 +13,23 @@
 ;; - (resolve σ τ) : uses the type `τ` to convert the overloaded `σ` to an exact instance
 
 ;; Overloaded functions are first class, and can be passed as arguments etc.
-;; They try to resolve at compile-time, but will resort to run-time tag checks
-
-;; Implementation strategy
-;; - make explicit type for overloadables
-;;   showing the __free variables__ and __instance carrier__
-;; - new instances update the carrier
-;; - lookups query the type; the type contains the lookup table
+;; They try to resolve at compile-time, but will resort to run-time typecase
 
 ;; TODO
-;; - constructors in carrier (× α α)
-;; - partially-applied constructors in carrier (× $ Int)
-;; - subtyping (also resolve, in the middle of things... this is where Σ ∈ τ might be good)
+;; - poly. constructors in carrier (× α α)
 ;; - multiple params
+;; - partially-applied constructors in carrier (× $ Int)
 ;; - multiple methods (separate extension)
+;; - overload codomain
+;; - overload non-functions
+
+;; ETC
+;; lambda, resolve S=t to a plain arrow
+;; lambda, infer argument use (via flow) on a poly, resolve to plain arrow
+;; var-arity, one arg instantiates the rest
 
 (define-typed-syntax #%datum
   [(_ . n)
-   ;; TODO why is this getting called? is datum called on types?
    #:when (⟦Σ⟧? (syntax-e #'n))
    (⊢ (#%datum . n) : #%type)]
   [(_ . x) #'(stlc+occurrence:#%datum . x)])
@@ -42,7 +41,6 @@
 ;; - α is a bound variable
 ;; - § is the carrier set for the algebra of types the ψ is defined on
 ;; - τ is a type with α free
-;; TODO : round2, § now contains a compile-time map
 (define-type-constructor ψ #:arity = 2 #:bvs = 1)
 ;; For representing carrier sets. The first argument to ψ should be an §-type
 (define-type-constructor § #:arity >= 0)
@@ -51,38 +49,44 @@
 ;; === Type->Expr maps
 
 (define *log-dynamic-resolve* (make-parameter #t))
-(define-syntax-rule (log-dynamic-resolve Σ arg)
+(define-syntax-rule (log-dynamic-resolve Σ arg*)
   (when (*log-dynamic-resolve*)
-    (printf "[DYN.RESOLVE] numcases: ~a, arg: ~a\n" (Σ-count Σ) arg)))
+    (printf "[DYN.RESOLVE] numcases: ~a, arg: ~a\n" (Σ-count Σ) arg*)))
 
 ;; § is compile-time, Σ lives at runtime
 
 (struct Σ (
   map ;; (Listof (Pairof (-> Any Boolean) Expr)), maps type predicates to implementations
+  posn* ;; (Listof Natural), positions in the domain where free variable appears
  ) #:transparent
    #:constructor-name make-Σ
    #:property prop:procedure
-   (lambda (self arg)
-     (log-dynamic-resolve self arg)
+   (lambda (self . arg*)
+     (log-dynamic-resolve self arg*)
      ;; Lookup finds a function, we apply this function to the lookup argument.
      ;; (Guess we could make this tail recursive)
-     (define fn (Σ-lookup self arg))
-     (fn arg)))
+     (define fn (Σ-lookup self arg*))
+     (apply fn arg*)))
 
 (define (Σ-add Σ τ e)
-  (make-Σ (cons (cons τ e) (Σ-map Σ))))
+  (make-Σ (cons (cons τ e) (Σ-map Σ)) (Σ-posn* Σ)))
 
 (define (Σ-count Σ)
   (length (Σ-map Σ)))
 
-(define (Σ-init)
-  (make-Σ '()))
+(define (Σ-init posn*)
+  (make-Σ '() posn*))
 
-(define (Σ-lookup Σ e)
+(define (Σ-lookup Σ e*)
+  (define filtered-e*
+    (for/list ([e (in-list e*)] [i (in-naturals)]
+               #:when (member i (Σ-posn* Σ) =))
+      e))
   (or
-   (for/first ([τ+e (in-list (Σ-map Σ))] #:when ((car τ+e) e))
+   (for/first ([τ+e (in-list (Σ-map Σ))]
+               #:when (andmap (car τ+e) filtered-e*))
      (cdr τ+e))
-   (error 'Σ (format "Runtime type dispatch failed: no match for argument '~a'" e))))
+   (error 'Σ (format "Runtime type dispatch failed: no match for arguments '~a'" e*))))
 
 ;; -----------------------------------------------------------------------------
 
@@ -105,9 +109,9 @@
  (define (⟦Σ⟧-add ⟦Σ⟧ τ e)
    (make-⟦Σ⟧ (cons (cons τ e) (⟦Σ⟧-map ⟦Σ⟧))))
 
-;; Update the type τ with the new map Σ
-;; TODO does not check "τ consistent with Σ"
-;;      better to weave this into ⟦Σ⟧-add ?
+ ;; Update the type τ with the new map Σ
+ ;; TODO does not check "τ consistent with Σ"
+ ;;      better to weave this into ⟦Σ⟧-add ?
  (define (⟦Σ⟧->type τ Σ)
    (syntax-parse τ
     [(~ψ A _ τ)
@@ -143,8 +147,8 @@
       [else 
        #f])))
 
- ;; Reflect an §-type to a syntax map, for uniformity
- (define (§->⟦Σ⟧ τ*)
+ ;; Reflect an list of types to a syntax map
+ (define (τ*->⟦Σ⟧ τ*)
    (make-⟦Σ⟧ (for/list ([τ (in-list (cannonize τ*))]) (cons τ #f))))
 
  ;; Calling Σ->§ would be symmetric, but not as useful.
@@ -155,8 +159,7 @@
 
 ;; =============================================================================
 
-;; TODO put these in typecheck.rkt
-(begin-for-syntax
+(begin-for-syntax ;; TODO put these in typecheck.rkt
  (define (τ->symbol τ)
    (syntax-parse τ
     [(_ κ)
@@ -203,7 +206,7 @@
              τ))
          ;; ... could also check well-formedness of τ_α, not sure if this is the best place
          ;;(§ #,@(cannonize τ*))
-         (τ-eval #`(ψ (α* ...) #,(assign-type #`#,(§->⟦Σ⟧ (cannonize τ*+)) #'#%type) τ_α))]
+         (τ-eval #`(ψ (α* ...) #,(assign-type #`#,(τ*->⟦Σ⟧ (cannonize τ*+)) #'#%type) τ_α))]
         [τ
          #'τ]))))
  (current-type-eval ψ-eval)
@@ -234,7 +237,6 @@
                               (substs #'(x ...) #'(y ...) #'t2)))]
        [_
         (sub? τ1 τ2)]))))
-
  (current-sub? ∀-sub?)
 
  (define ψ-sub?
@@ -260,13 +262,13 @@
  (define (syntax->struct stx)
    (unless (syntax? stx)
      (error 'syntax->struct (format "expected a syntax object, got '~a'" stx)))
-   (define e (syntax-e stx))
-   (unless (and (list? e) (not (null? e)) (not (null? (cdr e))))
-     (error 'syntax->struct (format "expected a quoted value, got '~a'" e)))
-   (define e+ (cadr e))
-   (unless (syntax? e+)
-     (error 'syntax->struct (format "expected a nested syntax object, got '~a'" e+)))
-   (syntax-e e+))
+   (syntax-parse stx
+    [(~§ τ* ...)
+     (τ*->⟦Σ⟧ (syntax->list #'(τ* ...)))]
+    [(_ e+)
+     (syntax-e #'e+)]
+    [_
+     (error 'syntax->struct (format "could not handle ~a\n" stx))]))
 
  (current-type=? ψ=?)
  (current-sub? ψ-sub?)
@@ -292,23 +294,33 @@
    (error 'signature (format "Cannot declare signature at type '~a'. ~a"
                              (syntax->datum τ)
                              reason)))
+
+ (define-syntax-rule (unify-error reason)
+   (error-template 'unify reason))
+ 
 )
 
 (define-typed-syntax signature
   [(_ (α:id) τ)
    ;; Expand the type τ with α bound as a valid type
    #:with ((α+) τ+ _) (infer/tyctx+erase #'([α : #%type]) #'τ)
-   ;; Make sure τ is (→ α τ') for some real type τ'
-   #:when (syntax-parse #'τ+
-           [(~→ τ-dom τ-cod)
-            ;; τ-dom MUST be the (expanded) identifier α+
-            (unless (and (identifier? #'τ-dom)
-                         (free-identifier=? #'τ-dom #'α+))
-              (signature-error #'τ
-                               (format "Variable '~a' must be free in the signature type." (syntax->datum #'α))))]
-           [_
-            (signature-error #'τ "We only support single-argument functions with overloaded domains.")])
-   (⊢ (Σ-init)
+   ;; Collect domain positions where α appears (will generalize to a list of such maps)
+   (define α-posn*
+     (syntax-parse #'τ+
+      [(~→ τ-dom* ... τ-cod)
+       (when (and (identifier? #'τ-cod) (free-identifier=? #'τ-cod #'α+))
+         (signature-error #'τ
+                          (format "Variable '~a' cannot be codomain, for now." #'α+)))
+       ;; One of τ-dom MUST be the (expanded) identifier α+
+       (for/list ([τ_dom (in-syntax #'(τ-dom* ...))]
+                  [i (in-naturals)]
+                  #:when (and (identifier? τ_dom) (free-identifier=? τ_dom #'α+)))
+         i)]
+      [_
+       (signature-error #'τ "We only functions with overloaded domains, for now.")]))
+   (when (null? α-posn*)
+     (signature-error #'τ (format "Variable '~a' must be free in the domain of the signature type." (syntax->datum #'α))))
+   (⊢ (Σ-init '#,α-posn*)
       : (ψ (α) #,(assign-type #`#,(⟦Σ⟧-init) #'#%type) τ))])
 
 (define-typed-syntax instance
@@ -318,19 +330,21 @@
    ;; τ_Σ should be a ψ type
    ;; τ_e should be an arrow (for now, really it should match τ_α)
    (syntax-parse #'(τ_Σ τ_e)
-    [((~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod_template))
-      (~→ τ_dom τ_cod_actual))
+    [((~ψ (α) ⟦Σ⟧-stx (~→ τ_α* ... τ_cod_template))
+      (~→ τ_dom* ... τ_cod_actual))
+     ;; Unify the concrete domain against the template domain
+     (define τ_new (unify-dom #'α #'(τ_α* ...) #'(τ_dom* ...)))
+     ;; Assert τ_dom is new in the struct-dict
      (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
-     ;; Assert τ_dom is new
-     (when (⟦Σ⟧-mem? ⟦Σ⟧ #'τ_dom)
-       (instance-error (format "Duplicate instance at type '~a'" (syntax->datum #'τ_dom))))
+     (when (⟦Σ⟧-mem? ⟦Σ⟧ τ_new)
+       (instance-error (format "Duplicate instance at type '~a'" (syntax->datum τ_new))))
      ;; Unify codomains (just ignore τ_α for now)
      (unless ((current-typecheck-relation) #'τ_cod_actual #'τ_cod_template)
        (instance-error (format "Cannot unify '~a' with template '~a'"
-                               (syntax->datum #'(→ τ_dom τ_cod_actual))
-                               (syntax->datum #'(→ τ_α τ_cod_template)))))
-     (⊢ (Σ-add Σ+ #,((current-Π) #'τ_dom) e+)
-        : #,(⟦Σ⟧->type #'τ_Σ (⟦Σ⟧-add ⟦Σ⟧ #'τ_dom #'e+)))]
+                               (syntax->datum #'τ_e)
+                               (syntax->datum #'τ_Σ))))
+     (⊢ (Σ-add Σ+ #,((current-Π) τ_new) e+)
+        : #,(⟦Σ⟧->type #'τ_Σ (⟦Σ⟧-add ⟦Σ⟧ τ_new #'e+)))]
     ;; Error cases
     [(_
       (~→ τ* ...))
@@ -344,19 +358,44 @@
                     (syntax->datum #'τ_Σ)
                     (syntax->datum #'τ_e)))])])
 
+(define-for-syntax (unify-dom α τ_α* τ_dom*)
+  (unless (= (stx-length τ_α*) (stx-length τ_dom*))
+    (unify-error (format "Different length domains '~a' vs. '~a'" (syntax->datum τ_α*) (syntax->datum τ_dom*))))
+  (define (α=? τ)
+    (and (identifier? τ) (free-identifier=? τ α)))
+  (for/fold ([τ_new #f])
+            ([τ_α (in-syntax τ_α*)]
+             [τ_dom (in-syntax τ_dom*)]
+             [arg-num (in-naturals)])
+    (cond
+     [(α=? τ_α)
+      ;; Get the concrete type that replaces this variable; make sure all replacements agree
+      (cond
+       [(not τ_new)  τ_dom]
+       [((current-typecheck-relation) τ_new τ_dom)  τ_dom]
+       [((current-typecheck-relation) τ_dom τ_new)  τ_new]
+       [else  (unify-error
+               (format "Incompatible types '~a' and '~a' used for variable '~a'."
+                       (syntax->datum τ_new) (syntax->datum τ_dom) (syntax->datum τ_α)))])]
+     [else
+      ;; Make sure template and instance agree here
+      ;; (We will replace τ_α with τ_dom, so they must be <: compatible.)
+      (unless ((current-typecheck-relation) τ_α τ_dom)
+        (unify-error (format "Type '~a' does not match signature '~a' (position ~a)"
+                             (syntax->datum τ_dom) (syntax->datum τ_α) arg-num)))
+      τ_new])))
+
 (define-for-syntax (resolve/internal e τ τ<=?)
-  ;; TODO don't unfold the type to an →, instead [τ / α]
   (syntax-parse (infer+erase e)
-   [(Σ (~ψ (α) ⟦Σ⟧-stx (~→ τ_α τ_cod)))
+   [(Σ (~ψ (α) ⟦Σ⟧-stx τ_α))
     #:with τ+ ((current-type-eval) τ)
     (define ⟦Σ⟧ (syntax->struct #'⟦Σ⟧-stx))
     (unless (⟦Σ⟧-mem? ⟦Σ⟧ #'τ+ τ<=?)
       (resolve-error τ "No matching instance."))
     ;; Try resolving statically, else use the actual term Σ as a dictionary
     (define f (or (⟦Σ⟧-lookup ⟦Σ⟧ #'τ+ τ<=?) #'Σ))
-    (⊢ #,f
-      ;; TODO use subst on the type, don't unfold into an →
-      : (→ τ+ τ_cod))]))
+    (define τ/α (subst #'τ+ #'α #'τ_α))
+    (⊢ #,f : #,τ/α)]))
 
 (define-typed-syntax resolve
   [(_ e τ)
@@ -364,12 +403,16 @@
 
 ;; Hijack application to typecheck
 (define-typed-syntax app/tc #:export-as #%app
-  [(_ e_1 e_2)
-   ;; Check that e_1 is a ψ-type after expanding
-   #:with [e_1+ τ_1+] (infer+erase #'e_1)
+  [(_ e_1 e_2* ...)
+   #:with (e_1+ τ_1+) (infer+erase #'e_1)
    #:when (ψ? #'τ_1+)
-   #:with [e_2+ τ_2+] (infer+erase #'e_2)
-   ;; Try resolving, then #%app like normal
-   #`(stlc:#%app #,(resolve/internal #'e_1+ #'τ_2+ (current-sub?)) e_2+)]
+   ;; Destruct τ_1 to filter the overloading arguments from (e_2* ...)
+   (syntax-parse #'τ_1+
+    [(~ψ (α) _ (~→ τ_dom* ... τ_cod))
+     #:with ([e_2*+ τ_2*+] ...) (infers+erase #'(e_2* ...))
+     (define τ_new (unify-dom #'α #'(τ_dom* ...) #'(τ_2*+ ...)))
+     ;; Try resolving, then #%app like normal
+     #`(stlc:#%app #,(resolve/internal #'e_1+ τ_new (current-sub?)) e_2*+ ...)]
+    [_ (error 'ψ-app (format "internal error parsing ~a" (syntax->datum #'(e_1 e_2* ...))))])]
   [(_ e* ...)
    #'(stlc:#%app e* ...)])
