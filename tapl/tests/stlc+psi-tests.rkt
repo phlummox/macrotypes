@@ -98,8 +98,6 @@
  (signature (a) (→ a Boolean))
  : (ψ (b) (§) (→ b Boolean)))
 
-;; TODO more shapes
-
 ;; --- fail
 
 (typecheck-fail
@@ -108,11 +106,11 @@
 
 (typecheck-fail
  (signature () (→ Int Int))
- #:with-msg "expected more terms")
+ #:with-msg "Improper usage")
 
 (typecheck-fail
  (signature (a b c) (→ a b))
- #:with-msg "unexpected term")
+ #:with-msg "Cannot declare signature")
 
 (typecheck-fail
  (signature (a) (→ Int a))
@@ -203,11 +201,6 @@
 (typecheck-fail
  (λ ([f : (ψ () (§ Int) (→ Int Int))]) 3)
  #:with-msg "Improper usage of type constructor")
-
-;; Too many type variables
-(typecheck-fail
- (λ ([x : (ψ (A B C) (§ Int) (→ B Boolean))]) 1)
- #:with-msg "Improper usage")
 
 ;; -----------------------------------------------------------------------------
 ;; -- resolve
@@ -573,3 +566,80 @@
    (λ ([x : Int] [y : Int]) #t)))
  : Boolean
  ⇒ #t)
+
+;; -----------------------------------------------------------------------------
+;; --- multiple type parameters
+
+(check-type
+ (signature (A B) (→ A B A Int))
+ : (ψ (X Y) (§) (→ X Y X Int)))
+
+(typecheck-fail
+ (signature (A B) (→ A Int))
+ #:with-msg "must appear")
+
+(typecheck-fail
+ (signature (A B C) (→ A B A Int))
+ #:with-msg "must appear")
+
+
+(check-type
+ (signature (A B) (→ A B A Int))
+ : (ψ (X Y) (§) (→ X Y X Int)))
+
+(check-type
+ (instance
+  (signature (A B) (→ A B A Int))
+  (λ ([x : Int] [y : Boolean] [z : Int])
+     x))
+: (ψ (X Y) (§ (· Int Boolean)) (→ X Y X Int)))
+
+(typecheck-fail
+ (resolve
+  (instance
+   (signature (A B) (→ A B A Int))
+   (λ ([x : Int] [y : Boolean] [z : Int])
+      x))
+  Int Int)
+  #:with-msg "No matching instance")
+
+(check-type
+ (resolve
+  (instance
+   (signature (A B) (→ A B A Int))
+   (λ ([x : Int] [y : Boolean] [z : Int])
+      x))
+  Int Boolean)
+: (→ Int Boolean Int Int))
+
+(check-type-and-result
+ ((instance
+   (signature (A B) (→ A B A Int))
+   (λ ([x : Int] [y : Boolean] [z : Int])
+      x))
+  1 #t 2)
+ : Int
+ ⇒ 1)
+
+(typecheck-fail
+ ((instance
+   (signature (A B) (→ A B A Int))
+   (λ ([x : Int] [y : Boolean] [z : Int])
+      x))
+  1 #t #f)
+ #:with-msg "Incompatible types")
+
+(check-type
+ (λ ([x : (ψ (A B) (§ (· Int Int) (· Int Boolean)) (→ A B A))])
+    (x 1 #f))
+ ;; Types should de-duplicate and sort
+ : (→ (ψ (X Y) (§ (· Int Boolean) (· Int Int) (· Int Int)) (→ X Y X)) Int))
+
+(check-type-and-result
+ ((instance
+   (signature (A B) (→ A B A Int))
+   (λ ([x : Int] [y : Boolean] [z : Int])
+      x))
+  1 #t 2)
+ : Int
+ ⇒ 1)
