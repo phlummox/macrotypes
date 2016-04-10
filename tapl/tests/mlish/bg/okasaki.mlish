@@ -1652,3 +1652,179 @@
   : (Option (BinaryRAList Int))
   ⇒ None)
 
+;; =============================================================================
+;; === Alt Binary Random Access List
+
+(define-type (BinaryRAList A)
+  (ABLNil)
+  (ABLZero (BinaryRAList (× A A)))
+  (ABLOne A (BinaryRAList (× A A))))
+
+(define (abl-uncons (bl : (BinaryRAList A)) → (Option (× A (BinaryRAList A))))
+  (match bl with
+   (ABLNil -> None)
+   (ABLOne x ps ->
+    (Some (match ps with
+     (ABLNil -> (tup x ABLNil))
+     (ABLOne y ps2 -> (tup x (ABLZero ps)))
+     (ABLZero ps2 -> (tup x (ABLZero ps))))))
+   (ABLZero ps ->
+    (match (abl-uncons ps) with
+     (None -> None)
+     (Some xyps2 ->
+      (match xyps2 with
+       (xy ps2 ->
+        (match xy with
+         (x y -> (Some (tup x (ABLOne y ps2))))))))))))
+
+(define (abl-fupdate (f : (→ A A)) (i : Int) (bl : (BinaryRAList A)) → (Option (BinaryRAList A)))
+  (match bl with
+   (ABLNil -> None)
+   (ABLOne x ps ->
+    (if (= 0 i)
+      (Some (ABLOne (f x) ps))
+      (match (abl-fupdate f (- i 1) (ABLZero ps)) with
+       (None -> None)
+       (Some z -> (Some (abl-cons x z))))))
+   (ABLZero ps ->
+     (let ((f2 (if (= 0 (mod i 2))
+                 (λ ([xy : (× A A)])
+                   (match xy with (x y -> (tup (f x) y))))
+                 (λ ([xy : (× A A)])
+                   (match xy with (x y -> (tup x (f y))))))))
+      (match (abl-fupdate f2 (div i 2) ps) with
+        (None -> None)
+        (Some z -> (Some (ABLZero z))))))))
+
+(define (aabl-empty → (BinaryRAList A))
+  ABLNil)
+
+(define (abl-isEmpty (bl : (BinaryRAList A)) → Bool)
+  (match bl with
+   (ABLNil -> #t)
+   (ABLOne a b -> #f)
+   (ABLZero a -> #f)))
+
+(define (abl-cons (x : A) (bl : (BinaryRAList A)) → (BinaryRAList A))
+  (match bl with
+   (ABLNil -> (ABLOne x ABLNil))
+   (ABLZero ps -> (ABLOne x ps))
+   (ABLOne y ps -> (ABLZero (abl-cons (tup x y) ps)))))
+
+(define (abl-head (bl : (BinaryRAList A)) → (Option A))
+  (match (abl-uncons bl) with
+   (None -> None)
+   (Some xy ->
+    (match xy with
+     (x y -> (Some x))))))
+
+(define (abl-tail (bl : (BinaryRAList A)) → (Option (BinaryRAList A)))
+  (match (abl-uncons bl) with
+   (None -> None)
+   (Some xy ->
+    (match xy with
+     (x y -> (Some y))))))
+
+(define (abl-lookup (i : Int) (bl : (BinaryRAList A)) → (Option A))
+  (if (< i 0)
+    None
+    (abl-lookup/natural i bl)))
+
+(define (abl-lookup/natural (i : Int) (bl : (BinaryRAList A)) → (Option A))
+  (match bl with
+   (ABLNil -> None)
+   (ABLOne x ps ->
+    (if (= 0 i)
+      (Some x)
+      (abl-lookup/natural (- i 1) (ABLZero ps))))
+   (ABLZero ps ->
+    (match (abl-lookup/natural (div i 2) ps) with
+     (None -> None)
+     (Some xy ->
+      (match xy with
+       (x y ->
+        (if (= 0 (mod i 2))
+          (Some x)
+          (Some y)))))))))
+
+(define (abl-update (i : Int) (y : A) (bl : (BinaryRAList A)) → (Option (BinaryRAList A)))
+  (abl-fupdate (λ ([x : A]) y) i bl))
+
+(define (list->abl-list (xs : (List A)) → (BinaryRAList A))
+  (match xs with
+   (Nil -> (aabl-empty))
+   (∷ a b -> (abl-cons a (list->abl-list b)))))
+
+;; =============================================================================
+
+(define abl-digit*
+  (list->abl-list (∷ 1 (∷ 2 (∷ 3 (∷ 4 (∷ 5 (∷ 6 (∷ 7 (∷ 8 (∷ 9 Nil)))))))))))
+
+(define (abl-nil → (BinaryRAList Int))
+  (list->abl-list (Nil {Int})))
+
+(check-type
+  (abl-isEmpty (abl-nil))
+  : Bool
+  ⇒ #t)
+
+(check-type
+  (abl-isEmpty abl-digit*)
+  : Bool
+  ⇒ #f)
+
+(check-type
+  (match (abl-head abl-digit*) with
+   (None -> 0)
+   (Some x -> x))
+  : Int
+  ⇒ 1)
+
+(check-type
+  (match (abl-tail abl-digit*) with
+   (None -> 0)
+   (Some x ->
+    (match (abl-head x) with
+     (None -> 0)
+     (Some y -> y))))
+  : Int
+  ⇒ 2)
+
+(check-type
+  (match (abl-lookup 7 abl-digit*) with
+   (None -> 0)
+   (Some x -> x))
+  : Int
+  ⇒ 8)
+
+(check-type
+  (match (abl-lookup 8 abl-digit*) with
+   (None -> 0)
+   (Some x -> x))
+  : Int
+  ⇒ 9)
+
+(check-type
+  (abl-lookup -111 abl-digit*)
+  : (Option Int)
+  ⇒ (None {Int}))
+
+(check-type
+  (match (abl-update 3 99 abl-digit*) with
+   (None -> (None {Int}))
+   (Some x -> (abl-lookup 3 x)))
+  : (Option Int)
+  ⇒ (Some 99))
+
+(check-type
+  (match (abl-update 0 222 abl-digit*) with
+   (None -> (None {Int}))
+   (Some x -> (abl-head x)))
+  : (Option Int)
+  ⇒ (Some 222))
+
+(check-type
+  (abl-update 83 1 abl-digit*)
+  : (Option (BinaryRAList Int))
+  ⇒ (None {(BinaryRAList Int)}))
+
