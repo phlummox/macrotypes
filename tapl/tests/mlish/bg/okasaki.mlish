@@ -5,6 +5,8 @@
 ;; - cannot inst polymorphic function `bq-empty`
 ;; - cannot inst `(BQ (Nil {A}) (Nil {A}))`
 ;; - cannot use bq-snoc directly in a foldl (need wrapper λ)
+;; - (LeftistHeap A) is wrong, need (Ord A) => (LeftistHeap A)
+;;   or just, OCaml-style (<= : A A -> Bool)
 
 ;; -----------------------------------------------------------------------------
 
@@ -1827,4 +1829,184 @@
   (abl-update 83 1 abl-digit*)
   : (Option (BinaryRAList Int))
   ⇒ (None {(BinaryRAList Int)}))
+
+;; =============================================================================
+;; === Leftist Heap
+
+(define-type (LeftistHeap Int)
+  (E)
+  (T Int Int (LeftistHeap Int) (LeftistHeap Int)))
+
+(define (lh-rank (h : (LeftistHeap Int)) → Int)
+  (match h with
+   (E -> 0)
+   (T r _a _l _r -> r)))
+
+(define (lh-makeT (x : Int) (a : (LeftistHeap Int)) (b : (LeftistHeap Int)) → (LeftistHeap Int))
+  (let ((ra (lh-rank a))
+        (rb (lh-rank b)))
+    (if (< ra rb)
+      (T (+ 1 rb) x a b)
+      (T (+ 1 ra) x b a))))
+
+(define (lh-empty → (LeftistHeap Int))
+  E)
+
+(define (lh-isEmpty (lh : (LeftistHeap Int)) → Bool)
+  (match lh with
+   (E -> #t)
+   (T r x a b -> #f)))
+
+(define (lh-insert (x : Int) (lh : (LeftistHeap Int)) → (LeftistHeap Int))
+  (lh-merge (T 1 x E E) lh))
+
+(define (lh-merge (lh1 : (LeftistHeap Int)) (lh2 : (LeftistHeap Int)) → (LeftistHeap Int))
+  (match lh2 with
+   (E -> lh1)
+   (T r2 x2 a2 b2 ->
+    (match lh1 with
+     (E -> lh2)
+     (T r1 x1 a1 b1 ->
+      (if (<= x1 x2)
+        (lh-makeT x1 a1 (lh-merge b1 lh2))
+        (lh-makeT x2 a2 (lh-merge lh1 b2))))))))
+
+(define (lh-findMin (lh : (LeftistHeap Int)) → (Option Int))
+  (match lh with
+   (E -> None)
+   (T r x a b -> (Some x))))
+
+(define (lh-deleteMin (lh : (LeftistHeap Int)) → (Option (LeftistHeap Int)))
+  (match lh with
+   (E -> None)
+   (T r x a b -> (Some (lh-merge a b)))))
+
+(define (list->leftist-heap (x* : (List Int)) → (LeftistHeap Int))
+  (match x* with
+   (Nil -> E)
+   (∷ x x* -> (lh-insert x (list->leftist-heap x*)))))
+
+;; =============================================================================
+
+(define sample-heap1
+  (list->leftist-heap (∷ 1 (∷ 2 (∷ 3 (∷ 4 (∷ 5 (∷ 6 (∷ 7 (∷ 8 (∷ 9 Nil)))))))))))
+
+(define sample-heap2
+  (list->leftist-heap (Nil {Int})))
+
+(define sample-heap3 
+  (list->leftist-heap (∷ 9 (∷ 7 (∷ 1 (∷ 5 (∷ 4 (∷ 2 (∷ 6 (∷ 8 (∷ 3 Nil)))))))))))
+
+(check-type
+  (lh-rank sample-heap1)
+  : Int
+  ⇒ 9)
+
+(check-type
+  (lh-rank sample-heap2)
+  : Int
+  ⇒ 0)
+
+(check-type
+  (lh-rank sample-heap3)
+  : Int
+  ⇒ 9)
+
+(check-type
+  (lh-isEmpty sample-heap1)
+  : Bool
+  ⇒ #f)
+
+(check-type
+  (lh-isEmpty sample-heap2)
+  : Bool
+  ⇒ #t)
+
+(check-type
+  (lh-isEmpty sample-heap3)
+  : Bool
+  ⇒ #f)
+
+(check-type
+  (lh-findMin sample-heap1)
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (lh-findMin sample-heap2)
+  : (Option Int)
+  ⇒ (None {Int}))
+
+(check-type
+  (lh-findMin sample-heap3)
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (match (lh-deleteMin sample-heap2) with
+   (None -> #t)
+   (Some x -> #f))
+  : Bool
+  ⇒ #t)
+
+(check-type
+  (match (lh-deleteMin sample-heap1) with
+   (None -> 0)
+   (Some x ->
+    (match (lh-findMin x) with
+     (None -> 0)
+     (Some x -> x))))
+  : Int
+  ⇒ 2)
+
+(check-type
+  (match (lh-deleteMin sample-heap3) with
+   (None -> 0)
+   (Some x ->
+    (match (lh-findMin x) with
+     (None -> 0)
+     (Some x -> x))))
+  : Int
+  ⇒ 2)
+
+(check-type
+  (match (lh-deleteMin sample-heap1) with
+   (None -> 0)
+   (Some x ->
+    (match (lh-deleteMin x) with
+     (None -> 0)
+     (Some x ->
+      (match (lh-deleteMin x) with
+       (None -> 0)
+       (Some x ->
+        (match (lh-findMin x) with
+         (None -> 0)
+         (Some x -> x))))))))
+  : Int
+  ⇒ 4)
+
+(check-type
+  (lh-findMin (lh-merge sample-heap1 sample-heap2))
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (lh-findMin (lh-merge sample-heap2 sample-heap2))
+  : (Option Int)
+  ⇒ (None {Int}))
+
+(check-type
+  (lh-findMin (lh-merge sample-heap2 sample-heap3))
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (lh-findMin (lh-merge sample-heap1 sample-heap3))
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (lh-rank (lh-merge sample-heap1 sample-heap3))
+  : Int
+  ⇒ 18)
 
