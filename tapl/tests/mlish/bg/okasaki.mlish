@@ -3,7 +3,6 @@
 
 ;; TODO
 ;; - cannot inst polymorphic function `bq-empty`
-;; - cannot inst `(BQ (Nil {A}) (Nil {A}))`
 ;; - cannot use bq-snoc directly in a foldl (need wrapper λ)
 ;; - (Heap A) is wrong, need (Ord A) => (Heap A)
 ;;   or just, OCaml-style (<= : A A -> Bool)
