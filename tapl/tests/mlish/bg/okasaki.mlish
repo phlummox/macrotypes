@@ -7,23 +7,6 @@
 ;; - cannot use bq-snoc directly in a foldl (need wrapper λ)
 ;; - (Heap A) is wrong, need (Ord A) => (Heap A)
 ;;   or just, OCaml-style (<= : A A -> Bool)
-;; - Binomial Heap : cannot test bh-rank function; getting error:
-;;     syntax-property: contract violation
-;;     expected: syntax?
-;;     given: '(#<syntax:/Users/ben/code/racket/stchang-macrotypes/tapl/stlc.rkt:122:5 (#%app list->binomial-heap250...> #<syntax:/Users/ben/code/racket/stchang-macrotypes/tapl/tests/mlish/bg/heap.mlish:130:49 (#%app BinomialHeap67 (lambda...>)
-;;       argument position: 1st
-;;       other arguments...:
-;;       'orig
-;;     context...:
-;;       ... tapl/typecheck.rkt:408:2: get-orig
-;;       ... tapl/typecheck.rkt:410:2: type->str
-;;       ... racket/collects/racket/private/map.rkt:21:13: map
-;;       ... tapl/stlc.rkt:76:0: core381
-;;       temp120
-;;       ... tapl/typecheck.rkt:54:9
-;;       success
-;;       ... racket/collects/syntax/wrap-modbeg.rkt:46:4
-;;       standard-module-name-resolver
 
 
 ;; -----------------------------------------------------------------------------
@@ -2152,25 +2135,26 @@
 (define sample-heap3 
   (list->binomial-heap (∷ 9 (∷ 7 (∷ 1 (∷ 5 (∷ 4 (∷ 2 (∷ 6 (∷ 8 (∷ 3 Nil)))))))))))
 
-;(check-type
-;  (bh-rank sample-heap1)
-;  : Int
-;  ⇒ 9)
-;
-;(check-type
-;  (bh-rank sample-heap2)
-;  : Int
-;  ⇒ 0)
-;
-;(check-type
-;  (bh-rank sample-heap3)
-;  : Int
-;  ⇒ 9)
-;
-;(check-type
-;  (bh-rank (bh-merge sample-heap1 sample-heap3))
-;  : Int
-;  ⇒ 18)
+(check-type
+  (match sample-heap1 with
+   (BH ts ->
+    (match ts with
+     (Nil -> -1)
+     (∷ t ts -> (bh-rank t)))))
+  : Int
+  ⇒ 0)
+
+(check-type
+  (match (bh-merge sample-heap1 sample-heap3) with
+   (BH ts ->
+    (match ts with
+     (Nil -> -1)
+     (∷ t1 ts ->
+      (match ts with
+       (Nil -> -1)
+       (∷ t2 ts -> (bh-rank t2)))))))
+  : Int
+  ⇒ 4)
 
 (check-type
   (bh-isEmpty sample-heap1)
