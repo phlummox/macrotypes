@@ -5,8 +5,26 @@
 ;; - cannot inst polymorphic function `bq-empty`
 ;; - cannot inst `(BQ (Nil {A}) (Nil {A}))`
 ;; - cannot use bq-snoc directly in a foldl (need wrapper λ)
-;; - (LeftistHeap A) is wrong, need (Ord A) => (LeftistHeap A)
+;; - (Heap A) is wrong, need (Ord A) => (Heap A)
 ;;   or just, OCaml-style (<= : A A -> Bool)
+;; - Binomial Heap : cannot test bh-rank function; getting error:
+;;     syntax-property: contract violation
+;;     expected: syntax?
+;;     given: '(#<syntax:/Users/ben/code/racket/stchang-macrotypes/tapl/stlc.rkt:122:5 (#%app list->binomial-heap250...> #<syntax:/Users/ben/code/racket/stchang-macrotypes/tapl/tests/mlish/bg/heap.mlish:130:49 (#%app BinomialHeap67 (lambda...>)
+;;       argument position: 1st
+;;       other arguments...:
+;;       'orig
+;;     context...:
+;;       ... tapl/typecheck.rkt:408:2: get-orig
+;;       ... tapl/typecheck.rkt:410:2: type->str
+;;       ... racket/collects/racket/private/map.rkt:21:13: map
+;;       ... tapl/stlc.rkt:76:0: core381
+;;       temp120
+;;       ... tapl/typecheck.rkt:54:9
+;;       success
+;;       ... racket/collects/syntax/wrap-modbeg.rkt:46:4
+;;       standard-module-name-resolver
+
 
 ;; -----------------------------------------------------------------------------
 
@@ -1834,56 +1852,56 @@
 ;; === Leftist Heap
 
 (define-type (LeftistHeap Int)
-  (E)
-  (T Int Int (LeftistHeap Int) (LeftistHeap Int)))
+  (LHE)
+  (LHT Int Int (LeftistHeap Int) (LeftistHeap Int)))
 
 (define (lh-rank (h : (LeftistHeap Int)) → Int)
   (match h with
-   (E -> 0)
-   (T r _a _l _r -> r)))
+   (LHE -> 0)
+   (LHT r _a _l _r -> r)))
 
 (define (lh-makeT (x : Int) (a : (LeftistHeap Int)) (b : (LeftistHeap Int)) → (LeftistHeap Int))
   (let ((ra (lh-rank a))
         (rb (lh-rank b)))
     (if (< ra rb)
-      (T (+ 1 rb) x a b)
-      (T (+ 1 ra) x b a))))
+      (LHT (+ 1 rb) x a b)
+      (LHT (+ 1 ra) x b a))))
 
 (define (lh-empty → (LeftistHeap Int))
-  E)
+  LHE)
 
 (define (lh-isEmpty (lh : (LeftistHeap Int)) → Bool)
   (match lh with
-   (E -> #t)
-   (T r x a b -> #f)))
+   (LHE -> #t)
+   (LHT r x a b -> #f)))
 
 (define (lh-insert (x : Int) (lh : (LeftistHeap Int)) → (LeftistHeap Int))
-  (lh-merge (T 1 x E E) lh))
+  (lh-merge (LHT 1 x LHE LHE) lh))
 
 (define (lh-merge (lh1 : (LeftistHeap Int)) (lh2 : (LeftistHeap Int)) → (LeftistHeap Int))
   (match lh2 with
-   (E -> lh1)
-   (T r2 x2 a2 b2 ->
+   (LHE -> lh1)
+   (LHT r2 x2 a2 b2 ->
     (match lh1 with
-     (E -> lh2)
-     (T r1 x1 a1 b1 ->
+     (LHE -> lh2)
+     (LHT r1 x1 a1 b1 ->
       (if (<= x1 x2)
         (lh-makeT x1 a1 (lh-merge b1 lh2))
         (lh-makeT x2 a2 (lh-merge lh1 b2))))))))
 
 (define (lh-findMin (lh : (LeftistHeap Int)) → (Option Int))
   (match lh with
-   (E -> None)
-   (T r x a b -> (Some x))))
+   (LHE -> None)
+   (LHT r x a b -> (Some x))))
 
 (define (lh-deleteMin (lh : (LeftistHeap Int)) → (Option (LeftistHeap Int)))
   (match lh with
-   (E -> None)
-   (T r x a b -> (Some (lh-merge a b)))))
+   (LHE -> None)
+   (LHT r x a b -> (Some (lh-merge a b)))))
 
 (define (list->leftist-heap (x* : (List Int)) → (LeftistHeap Int))
   (match x* with
-   (Nil -> E)
+   (Nil -> LHE)
    (∷ x x* -> (lh-insert x (list->leftist-heap x*)))))
 
 ;; =============================================================================
@@ -2009,4 +2027,241 @@
   (lh-rank (lh-merge sample-heap1 sample-heap3))
   : Int
   ⇒ 18)
+
+;; =============================================================================
+;; === Binomial Heap
+
+(define-type (BHTree A)
+  (BHNode Int A (List (BHTree A))))
+
+(define-type (BinomialHeap A)
+  (BH (List (BHTree A))))
+
+(define (bh-rank (t : (BHTree A)) → Int)
+  (match t with
+   (BHNode i x t -> i)))
+
+(define (bh-root (t : (BHTree A)) → A)
+  (match t with
+   (BHNode i x t -> x)))
+
+(define (bh-link (t1 : (BHTree Int)) (t2 : (BHTree Int)) → (BHTree Int))
+  (match t1 with
+   (BHNode r x1 c1 ->
+    (match t2 with
+     (BHNode _r x2 c2 ->
+      (if (<= x1 x2)
+        (BHNode (+ r 1) x1 (∷ t2 c1))
+        (BHNode (+ r 1) x2 (∷ t1 c2))))))))
+
+(define (bh-insTree (t1 : (BHTree Int)) (ts : (List (BHTree Int))) → (List (BHTree Int)))
+  (match ts with
+   (Nil -> (∷ t1 Nil))
+   (∷ t2 ts2 ->
+    (if (< (bh-rank t1) (bh-rank t2))
+      (∷ t1 ts)
+      (bh-insTree (bh-link t1 t2) ts2)))))
+
+(define (bh-mrg (ts1 : (List (BHTree Int))) (ts2 : (List (BHTree Int))) → (List (BHTree Int)))
+  (match ts2 with
+   (Nil -> ts1)
+   (∷ t2 s2 ->
+    (match ts1 with
+     (Nil -> ts2)
+     (∷ t1 s1 ->
+      (let ((r1 (bh-rank t1))
+            (r2 (bh-rank t2)))
+        (if (< r1 r2)
+          (∷ t1 (bh-mrg s1 ts2))
+          (if (< r2 r1)
+            (∷ t2 (bh-mrg ts1 s2))
+            (bh-insTree (bh-link t1 t2) (bh-mrg s1 s2))))))))))
+
+(define (bh-removeMinTree (ts : (List (BHTree Int))) → (Option (× (BHTree Int) (List (BHTree Int)))))
+  (match ts with
+   (Nil -> None)
+   (∷ t ts ->
+    (match ts with
+     (Nil -> (Some (tup t Nil)))
+     (∷ x y ->
+      (match (bh-removeMinTree ts) with
+       (None -> None)
+       (Some t2ts2 ->
+        (match t2ts2 with
+         (t2 ts2 ->
+          (if (< (bh-root t) (bh-root t2))
+            (Some (tup t ts))
+            (Some (tup t2 (∷ t ts2)))))))))))))
+
+(define (bh-empty → (BinomialHeap A))
+  (BH Nil))
+
+(define (bh-isEmpty (bh : (BinomialHeap A)) → Bool)
+  (match bh with
+   (BH ts ->
+    (match ts with
+     (Nil -> #t)
+     (∷ a b -> #f)))))
+
+(define (bh-insert (x : Int) (bh : (BinomialHeap Int)) → (BinomialHeap Int))
+  (match bh with
+   (BH ts ->
+    (BH (bh-insTree (BHNode 0 x Nil) ts)))))
+
+(define (bh-merge (bh1 : (BinomialHeap Int)) (bh2 : (BinomialHeap Int)) → (BinomialHeap Int))
+  (match bh1 with
+   (BH ts1 ->
+    (match bh2 with
+     (BH ts2 ->
+      (BH (bh-mrg ts1 ts2)))))))
+
+(define (bh-findMin (bh : (BinomialHeap Int)) → (Option Int))
+  (match bh with
+   (BH ts ->
+    (match (bh-removeMinTree ts) with
+     (None -> None)
+     (Some xy ->
+      (match xy with
+       (x y -> (Some (bh-root x)))))))))
+
+(define (bh-deleteMin (bh : (BinomialHeap Int)) → (Option (BinomialHeap Int)))
+  (match bh with
+   (BH ts ->
+    (match (bh-removeMinTree ts) with
+     (None -> None)
+     (Some xts2 ->
+      (match xts2 with
+       (x ts2 ->
+        (match x with
+         (BHNode _r x ts1 ->
+          (Some (BH (bh-mrg (reverse ts1) ts2))))))))))))
+
+(define (list->binomial-heap (x* : (List Int)) → (BinomialHeap Int))
+  (match x* with
+   (Nil -> (bh-empty))
+   (∷ x x* -> (bh-insert x (list->binomial-heap x*)))))
+
+;; =============================================================================
+
+(define sample-heap1
+  (list->binomial-heap (∷ 1 (∷ 2 (∷ 3 (∷ 4 (∷ 5 (∷ 6 (∷ 7 (∷ 8 (∷ 9 Nil)))))))))))
+
+(define sample-heap2
+  (list->binomial-heap (Nil {Int})))
+
+(define sample-heap3 
+  (list->binomial-heap (∷ 9 (∷ 7 (∷ 1 (∷ 5 (∷ 4 (∷ 2 (∷ 6 (∷ 8 (∷ 3 Nil)))))))))))
+
+;(check-type
+;  (bh-rank sample-heap1)
+;  : Int
+;  ⇒ 9)
+;
+;(check-type
+;  (bh-rank sample-heap2)
+;  : Int
+;  ⇒ 0)
+;
+;(check-type
+;  (bh-rank sample-heap3)
+;  : Int
+;  ⇒ 9)
+;
+;(check-type
+;  (bh-rank (bh-merge sample-heap1 sample-heap3))
+;  : Int
+;  ⇒ 18)
+
+(check-type
+  (bh-isEmpty sample-heap1)
+  : Bool
+  ⇒ #f)
+
+(check-type
+  (bh-isEmpty sample-heap2)
+  : Bool
+  ⇒ #t)
+
+(check-type
+  (bh-isEmpty sample-heap3)
+  : Bool
+  ⇒ #f)
+
+(check-type
+  (bh-findMin sample-heap1)
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (bh-findMin sample-heap2)
+  : (Option Int)
+  ⇒ (None {Int}))
+
+(check-type
+  (bh-findMin sample-heap3)
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (match (bh-deleteMin sample-heap2) with
+   (None -> #t)
+   (Some x -> #f))
+  : Bool
+  ⇒ #t)
+
+(check-type
+  (match (bh-deleteMin sample-heap1) with
+   (None -> 0)
+   (Some x ->
+    (match (bh-findMin x) with
+     (None -> 0)
+     (Some x -> x))))
+  : Int
+  ⇒ 2)
+
+(check-type
+  (match (bh-deleteMin sample-heap3) with
+   (None -> 0)
+   (Some x ->
+    (match (bh-findMin x) with
+     (None -> 0)
+     (Some x -> x))))
+  : Int
+  ⇒ 2)
+
+(check-type
+  (match (bh-deleteMin sample-heap1) with
+   (None -> 0)
+   (Some x ->
+    (match (bh-deleteMin x) with
+     (None -> 0)
+     (Some x ->
+      (match (bh-deleteMin x) with
+       (None -> 0)
+       (Some x ->
+        (match (bh-findMin x) with
+         (None -> 0)
+         (Some x -> x))))))))
+  : Int
+  ⇒ 4)
+
+(check-type
+  (bh-findMin (bh-merge sample-heap1 sample-heap2))
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (bh-findMin (bh-merge sample-heap2 sample-heap2))
+  : (Option Int)
+  ⇒ (None {Int}))
+
+(check-type
+  (bh-findMin (bh-merge sample-heap2 sample-heap3))
+  : (Option Int)
+  ⇒ (Some 1))
+
+(check-type
+  (bh-findMin (bh-merge sample-heap1 sample-heap3))
+  : (Option Int)
+  ⇒ (Some 1))
 
