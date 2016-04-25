@@ -23,14 +23,19 @@
 (require (prefix-in stlc+cons: (only-in "stlc+cons.rkt" list)))
 (require (prefix-in stlc+tup: (only-in "stlc+tup.rkt" tup)))
 
-(provide → →/test match2 define-type)
+(provide → →/test =>/test match2 define-type)
 
-;; ML-like language
+;; ML-like language + ad-hoc polymorphism
 ;; - top level recursive functions
 ;; - user-definable algebraic datatypes
 ;; - pattern matching
 ;; - (local) type inference
+;;
+;; - type classes
 
+(define-type-constructor => #:arity > 0)
+
+;; type inference constraint solving
 (begin-for-syntax 
   ;; matching possibly polymorphic types
   (define-syntax ~?∀
@@ -191,9 +196,10 @@
   ;; alternate type sig syntax, after parameter names
   [(_ (f:id x:id ...) (~datum :) ty ... (~or (~datum ->) (~datum →)) ty_out . b)
    #'(define/tc (f [x : ty] ... -> ty_out) . b)]
-  [(_ (f:id [x:id (~datum :) τ] ... (~or (~datum ->) (~datum →)) τ_out) 
+  [(_ (f:id [x:id (~datum :) τ] ... ; no TC
+            (~or (~datum ->) (~datum →)) τ_out)
       e_body ... e)
-   #:with Ys (compute-tyvars #'(τ ... τ_out))
+   #:with (~and Ys (Y ...)) (compute-tyvars #'(τ ... τ_out))
    #:with g (add-orig (generate-temporary #'f) #'f)
    #:with e_ann #'(add-expected e τ_out) ; must be macro bc t_out may have unbound tvs
    #:with (τ+orig ...) (stx-map (λ (t) (add-orig t t)) #'(τ ... τ_out))
@@ -208,7 +214,28 @@
    #`(begin
       (define-syntax f (make-rename-transformer (⊢ g : ty_fn_expected)))
       (define g
-        (Λ Ys (ext-stlc:λ ([x : τ] ...) (ext-stlc:begin e_body ... e_ann)))))])
+        (Λ Ys (ext-stlc:λ ([x : τ] ...) (ext-stlc:begin e_body ... e_ann)))))]
+  [(_ (f:id [x:id (~datum :) τ] ... 
+            (~seq #:where TC ...)
+            (~or (~datum ->) (~datum →)) τ_out)
+      e_body ... e)
+   #:with (~and Ys (Y ...)) (compute-tyvars #'(τ ... τ_out))
+   #:with g (add-orig (generate-temporary #'f) #'f)
+   #:with e_ann #'(add-expected e τ_out) ; must be macro bc t_out may have unbound tvs
+   #:with (τ+orig ...) (stx-map (λ (t) (add-orig t t)) #'(τ ... τ_out))
+   ;; TODO: check that specified return type is correct
+   ;; - currently cannot do it here; to do the check here, need all types of
+   ;;  top-lvl fns, since they can call each other
+   #:with (~and ty_fn_expected (~∀ _ (~=> _ ... (~ext-stlc:→ _ ... out_expected))))
+          (syntax-property 
+              ((current-type-eval) #'(∀ Ys (=> TC ... (ext-stlc:→ τ+orig ...))))
+            'orig
+            (list #'(→ τ+orig ...)))
+   #`(begin
+      (define-syntax f (make-rename-transformer (⊢ g : ty_fn_expected)))
+      (define g
+        ;(Λ Ys (ext-stlc:λ ([x : τ] ...) (ext-stlc:begin e_body ... e_ann)))))])
+        (liftedλ {Y ...} ([x : τ] ... #:where TC ...) (ext-stlc:begin e_body ... e_ann))))])
 
 ;; define-type -----------------------------------------------
 ;; TODO: should validate τ as part of define-type definition (before it's used)
@@ -665,6 +692,12 @@
      #:with Xs (compute-tyvars #'rst)
      #'(∀ Xs (ext-stlc:→ . rst))]))
 
+(define-syntax =>/test 
+  (syntax-parser
+    [(_ . (~and rst (TC ... (_arr . tys_arr))))
+     #:with Xs (compute-tyvars #'rst)
+     #'(∀ Xs (=> TC ... (ext-stlc:→ . tys_arr)))]))
+
 ; redefine these to use lifted →
 (define-primop + : (→ Int Int Int))
 (define-primop - : (→ Int Int Int))
@@ -674,6 +707,7 @@
 (define-primop void : (→ Unit))
 (define-primop = : (→ Int Int Bool))
 (define-primop <= : (→ Int Int Bool))
+(define-primop >= : (→ Int Int Bool))
 (define-primop < : (→ Int Int Bool))
 (define-primop > : (→ Int Int Bool))
 (define-primop modulo : (→ Int Int Int))
@@ -685,8 +719,57 @@
 (define-primop even? : (→ Int Bool))
 (define-primop odd? : (→ Int Bool))
 
+;; λ --------------------------------------------------------------------------
+
 ; all λs have type (∀ (X ...) (→ τ_in ... τ_out)), even monomorphic fns
 (define-typed-syntax liftedλ #:export-as λ
+  [(_ ([x:id (~datum :) ty] ... #:where TC ...) body)
+   #:with (X ...) (compute-tyvars #'(ty ...))
+   (syntax/loc stx (liftedλ {X ...} ([x : ty] ... #:where TC ...) body))]
+  ;; TODO: I dont think this works for nested lambdas
+  ;; will re-infer tyvars X that should be bound by outer lam
+  [(_ (~and Xs (X ...)) ([x:id (~datum :) ty] ... #:where TC ...) body)
+   #:when (brace? #'Xs)
+   #:with (_ (X+ ...)
+           (_ () (_ () ; let-values
+            ty+ ... (_ _ TC+ ...))))
+          (expand/df 
+            #'(lambda (X ...) 
+                (let-syntax 
+                  ([X (make-rename-transformer (assign-type #'X #'#%type))] ...)
+                  ty ... (void TC ...)))) ; void avoids empty #%app
+   #:with ((_ (_ (_ op) ty-op*) ...) ...) #'(TC+ ...)
+   #:with (o ...) (stx-appendmap 
+                    (lambda (ops tc)
+                      (stx-map 
+                        (lambda (op) (datum->syntax tc (syntax->datum op)))
+                        ops))
+                    #'((op ...) ...) #'(TC ...))
+   #:with (ty-op ...) (stx-flatten #'((ty-op* ...) ...))
+   #:with (_ (o+ ...) ; lam
+           (_ () (_ () ; let-values
+            (_          ; expression
+             (_ (x+ ...) ; lam
+              (_ () (_ () ; let-values
+               body+)))))))
+          (expand/df 
+            #'(lambda (o ...)
+               (let-syntax 
+                ([o (make-rename-transformer (assign-type #'o #'ty-op))] ...)
+                 (lambda (x ...)
+                  (let-syntax
+                   ([x (make-rename-transformer (assign-type #'x #'ty+))] ...)
+                  body)))))
+   #:with ty-out (typeof #'body+)
+   (⊢ (λ (o+ ...) (λ (x+ ...) body+)) 
+      : (∀ (X+ ...) (=> TC+ ... (ext-stlc:→ ty+ ... ty-out))))]
+  [(_ ([x:id (~datum :) ty] ...) body) ; no TC
+   #:with (X ...) (compute-tyvars #'(ty ...))
+   #:with (~∀ () (~ext-stlc:→ _ ... body-ty)) (get-expected-type stx)
+   #'(Λ (X ...) (ext-stlc:λ ([x : ty] ...) (add-expected body body-ty)))]
+  [(_ ([x:id (~datum :) ty] ...) body) ; no TC, ignoring expected-type
+   #:with (X ...) (compute-tyvars #'(ty ...))
+   #'(Λ (X ...) (ext-stlc:λ ([x : ty] ...) body))]
   [(_ (x:id ...+) body)
    #:with (~?∀ Xs expected) (get-expected-type stx)
    #:do [(unless (→? #'expected)
@@ -697,10 +780,10 @@
                        (format "expected a function of ~a arguments, got one with ~a arguments"
                                (stx-length #'[arg-ty ...] #'[x ...]))))]
    #`(Λ Xs (ext-stlc:λ ([x : arg-ty] ...) #,(add-expected-ty #'body #'body-ty)))]
-  [(_ args body)
-   #:with (~?∀ () (~ext-stlc:→ arg-ty ... body-ty)) (get-expected-type stx)
+  #;[(_ args body)
+   #:with (~∀ () (~ext-stlc:→ arg-ty ... body-ty)) (get-expected-type stx)
    #`(Λ () (ext-stlc:λ args #,(add-expected-ty #'body #'body-ty)))]
-  [(_ (~and x+tys ([_ (~datum :) ty] ...)) . body)
+  #;[(_ (~and x+tys ([_ (~datum :) ty] ...)) . body)
    #:with Xs (compute-tyvars #'(ty ...))
    ;; TODO is there a way to have λs that refer to ids defined after them?
    #'(Λ Xs (ext-stlc:λ x+tys . body))])
@@ -710,9 +793,13 @@
 (define-typed-syntax mlish:#%app #:export-as #%app
   [(_ e_fn . e_args)
    ;; ) compute fn type (ie ∀ and →) 
-   #:with [e_fn- (~∀ Xs (~ext-stlc:→ . tyX_args))] (infer+erase #'e_fn)
+   #:with [e_fn- (~and ty_fn (~∀ Xs ty_fnX #;(~ext-stlc:→ . tyX_args)))] (infer+erase #'e_fn)
    (cond 
     [(stx-null? #'Xs)
+     (define/with-syntax tyX_args
+       (syntax-parse #'ty_fnX
+         [(~ext-stlc:→ . tyX_args) #'tyX_args]
+         [(~=> _ ... (~ext-stlc:→ . tyX_args))  #'tyX_args]))
      (syntax-parse #'(e_args tyX_args)
        [((e_arg ...) (τ_inX ... _))
         #:fail-unless (stx-length=? #'(e_arg ...) #'(τ_inX ...))
@@ -721,47 +808,121 @@
         #:with e_fn/ty (⊢ e_fn- : (ext-stlc:→ . tyX_args))
         #'(ext-stlc:#%app e_fn/ty (add-expected e_arg τ_inX) ...)])]
     [else
-     ;; ) solve for type variables Xs
-     (define/with-syntax ((e_arg1- ...) (unsolved-X ...) cs) (solve #'Xs #'tyX_args stx))
-     ;; ) instantiate polymorphic function type
-     (syntax-parse (inst-types/cs #'Xs #'cs #'tyX_args)
-      [(τ_in ... τ_out) ; concrete types
-       ;; ) arity check
-       #:fail-unless (stx-length=? #'(τ_in ...) #'e_args)
-                     (mk-app-err-msg stx #:expected #'(τ_in ...)
-                      #:note "Wrong number of arguments.")
-       ;; ) compute argument types; re-use args expanded during solve
-       #:with ([e_arg2- τ_arg2] ...) (let ([n (stx-length #'(e_arg1- ...))])
-                                       (infers+erase 
-                                         (stx-map add-expected-ty 
-                                           (stx-drop #'e_args n) (stx-drop #'(τ_in ...) n))))
-       #:with (τ_arg1 ...) (stx-map typeof #'(e_arg1- ...))
-       #:with (τ_arg ...) #'(τ_arg1 ... τ_arg2 ...)
-       #:with (e_arg- ...) #'(e_arg1- ... e_arg2- ...)
-       ;; ) typecheck args
-       #:fail-unless (typechecks? #'(τ_arg ...) #'(τ_in ...))
-                     (mk-app-err-msg stx 
-                      #:given #'(τ_arg ...)
-                      #:expected 
-                      (stx-map 
-                        (lambda (tyin) 
-                          (define old-orig (get-orig tyin))
-                          (define new-orig
-                            (and old-orig
-                                 (substs 
-                                   (stx-map get-orig (lookup-Xs/keep-unsolved #'Xs #'cs)) #'Xs old-orig
-                                   (lambda (x y) 
-                                    (equal? (syntax->datum x) (syntax->datum y))))))
-                          (set-stx-prop/preserved tyin 'orig (list new-orig)))
-                       #'(τ_in ...)))
-       #:with τ_out* (if (stx-null? #'(unsolved-X ...))
-                         #'τ_out
-                         (syntax-parse #'τ_out
-                           [(~?∀ (Y ...) τ_out)
-                            (unless (→? #'τ_out)
-                              (raise-app-poly-infer-error stx #'(τ_in ...) #'(τ_arg ...) #'e_fn))
-                            #'(∀ (unsolved-X ... Y ...) τ_out)]))
-       (⊢ (#%app e_fn- e_arg- ...) : τ_out*)])])]
+     (syntax-parse #'ty_fnX
+      ;; TODO: combine these two clauses
+      [(~ext-stlc:→ . tyX_args) ;; no typeclasses, duplicate code for now
+       ;; ) solve for type variables Xs
+       (define/with-syntax ((e_arg1- ...) (unsolved-X ...) cs) (solve #'Xs #'tyX_args stx))
+       ;; ) instantiate polymorphic function type
+       (syntax-parse (inst-types/cs #'Xs #'cs #'tyX_args)
+        [(τ_in ... τ_out) ; concrete types
+         ;; ) arity check
+         #:fail-unless (stx-length=? #'(τ_in ...) #'e_args)
+                       (mk-app-err-msg stx #:expected #'(τ_in ...)
+                        #:note "Wrong number of arguments.")
+         ;; ) compute argument types; re-use args expanded during solve
+         #:with ([e_arg2- τ_arg2] ...) (let ([n (stx-length #'(e_arg1- ...))])
+                                        (infers+erase 
+                                        (stx-map add-expected-ty 
+                                          (stx-drop #'e_args n) (stx-drop #'(τ_in ...) n))))
+         #:with (τ_arg1 ...) (stx-map typeof #'(e_arg1- ...))
+         #:with (τ_arg ...) #'(τ_arg1 ... τ_arg2 ...)
+         #:with (e_arg- ...) #'(e_arg1- ... e_arg2- ...)
+         ;; ) typecheck args
+         #:fail-unless (typechecks? #'(τ_arg ...) #'(τ_in ...))
+                       (mk-app-err-msg stx 
+                        #:given #'(τ_arg ...)
+                        #:expected 
+                        (stx-map 
+                          (lambda (tyin) 
+                            (define old-orig (get-orig tyin))
+                            (define new-orig
+                              (and old-orig
+                                   (substs 
+                                       (stx-map get-orig (lookup-Xs/keep-unsolved #'Xs #'cs)) #'Xs old-orig
+                                       (lambda (x y) 
+                                         (equal? (syntax->datum x) (syntax->datum y))))))
+                            (syntax-property tyin 'orig (list new-orig)))
+                          #'(τ_in ...)))
+         #:with τ_out* (if (stx-null? #'(unsolved-X ...))
+                           #'τ_out
+                           (syntax-parse #'τ_out
+                             [(~?∀ (Y ...) τ_out)
+                              (unless (→? #'τ_out)
+                                (raise-app-poly-infer-error stx #'(τ_in ...) #'(τ_arg ...) #'e_fn))
+                              #'(∀ (unsolved-X ... Y ...) τ_out)]))
+         (⊢ (#%app e_fn- e_arg- ...) : τ_out*)])]
+      ;; handle type class constraints
+      [(~=> TCX ... (~ext-stlc:→ . tyX_args))
+       ;; ) solve for type variables Xs
+       (define/with-syntax ((e_arg1- ...) (unsolved-X ...) cs) (solve #'Xs #'tyX_args stx))
+       ;; ) instantiate polymorphic function type
+       (syntax-parse (inst-types/cs #'Xs #'cs #'((TCX ...) tyX_args))
+         [((TC ...) (τ_in ... τ_out)) ; concrete types
+          #:with ((_ (_ (_ generic-op) ty-concrete-op) ...) ...) #'(TC ...)
+          #:with (mangled-op ...) 
+                 (stx-map
+                   (lambda (gen-op ty-conc-op)
+                     (format-id gen-op "~a~a" gen-op (type-hash-code ty-conc-op)))
+                   #'(generic-op ... ...) #'(ty-concrete-op ... ...))
+          #:with (op ...)
+          ;; TODO: errmsg is confusing if op is unused in body
+                 (stx-map
+                  (lambda (mop gen-op ty-conc-op)
+                   (with-handlers 
+                    ([exn:fail:syntax:unbound? 
+                      (lambda (e) 
+                       (type-error #:src stx
+                        #:msg (format "generic operation ~a has no instance with type ~a"
+                               (syntax->datum gen-op)
+                               (type->str
+                                (let* 
+                                 ([old-orig (get-orig ty-conc-op)]
+                                  [new-orig
+                                   (and 
+                                    old-orig
+                                    (substs (stx-map get-orig (lookup-Xs/keep-unsolved #'Xs #'cs)) #'Xs old-orig
+                                            (lambda (x y) 
+                                              (equal? (syntax->datum x) (syntax->datum y)))))])
+                                 (syntax-property ty-conc-op 'orig (list new-orig)))))))])
+                    (expand/df mop)))
+                  #'(mangled-op ...) #'(generic-op ... ...) #'(ty-concrete-op ... ...))
+          ;; ) arity check
+          #:fail-unless (stx-length=? #'(τ_in ...) #'e_args)
+                        (mk-app-err-msg stx #:expected #'(τ_in ...)
+                                        #:note "Wrong number of arguments.")
+          ;; ) compute argument types; re-use args expanded during solve
+          #:with ([e_arg2- τ_arg2] ...) (let ([n (stx-length #'(e_arg1- ...))])
+                                          (infers+erase 
+                                              (stx-map add-expected-ty 
+                                                (stx-drop #'e_args n) (stx-drop #'(τ_in ...) n))))
+          #:with (τ_arg1 ...) (stx-map typeof #'(e_arg1- ...))
+          #:with (τ_arg ...) #'(τ_arg1 ... τ_arg2 ...)
+          #:with (e_arg- ...) #'(e_arg1- ... e_arg2- ...)
+          ;; ) typecheck args
+          #:fail-unless (typechecks? #'(τ_arg ...) #'(τ_in ...))
+                        (mk-app-err-msg stx 
+                         #:given #'(τ_arg ...)
+                         #:expected 
+                         (stx-map 
+                             (lambda (tyin) 
+                               (define old-orig (get-orig tyin))
+                               (define new-orig
+                                 (and old-orig
+                                      (substs 
+                                          (stx-map get-orig #'tys-solved) #'Xs old-orig
+                                          (lambda (x y) 
+                                            (equal? (syntax->datum x) (syntax->datum y))))))
+                               (syntax-property tyin 'orig (list new-orig)))
+                           #'(τ_in ...)))
+         #:with τ_out* (if (stx-null? #'(unsolved-X ...))
+                           #'τ_out
+                           (syntax-parse #'τ_out
+                             [(~?∀ (Y ...) τ_out)
+                              (unless (→? #'τ_out)
+                                (raise-app-poly-infer-error stx #'(τ_in ...) #'(τ_arg ...) #'e_fn))
+                              #'(∀ (unsolved-X ... Y ...) τ_out)]))
+          (⊢ ((#%app e_fn- op ...) e_arg- ...) : τ_out*)])])])]
   [(_ e_fn . e_args) ; err case; e_fn is not a function
    #:with [e_fn- τ_fn] (infer+erase #'e_fn)
    (type-error #:src stx 
@@ -1181,9 +1342,10 @@
     [(_ e ty ...)
      #:with [ee tyty] (infer+erase #'e)
      #:with [e- ty_e] (infer+erase #'(sysf:inst e ty ...))
-     #:with ty_out (if (→? #'ty_e)
-                       #'(∀ () ty_e)
-                       #'ty_e)
+     #:with ty_out (cond
+                    [(→? #'ty_e) #'(∀ () ty_e)]
+                    [(=>? #'ty_e) #'(∀ () ty_e)]
+                    [else #'ty_e])
      (⊢ e- : ty_out)]))
 
 (define-typed-syntax read
@@ -1192,3 +1354,65 @@
         (cond [(eof-object? x) ""]
               [(number? x) (number->string x)]
               [(symbol? x) (symbol->string x)])) : String)])
+
+(provide define-typeclass define-instance)
+
+;; adhoc polymorphism
+;; TODO: make this a formal type, or at least define a pattern expander
+(define-syntax (define-typeclass stx)
+  (syntax-parse stx
+    [(_ (Name X ...) [op (~datum :) ty] ...)
+   ;; #:with (_ (X+ ...)
+   ;;         (_ () (_ () ; let-values
+   ;;          ty+ ...)))
+   ;;        (expand/df 
+   ;;          #'(lambda (X ...) 
+   ;;              (let-syntax 
+   ;;                ([X (make-rename-transformer (assign-type #'X #'#%type))] ...)
+   ;;                ty ...)))
+     #'(define-syntax (Name stx)
+         (syntax-parse stx
+           [(_ X ...) (mk-type #'(('op ty) ...))]))]))
+
+(define-for-syntax (type-hash-code ty)
+  (equal-hash-code (syntax->datum ty)))
+
+(define-syntax (define-instance stx)
+  (syntax-parse stx
+    [(_ (Name ty ...) [generic-op* concrete-op*] ...) ; unsorted
+     #:with (_ (_ (_ generic-op-expected) ty-concrete-op-expected) ...)
+            ((current-type-eval) #'(Name ty ...))
+     #:fail-unless (set=? (syntax->datum #'(generic-op* ...)) 
+                          (syntax->datum #'(generic-op-expected ...)))
+                   (type-error #:src stx
+                    #:msg (format "Type class instance ~a incomplete, missing: ~a"
+                            (syntax->datum #'(Name ty ...))
+                            (string-join
+                             (map symbol->string 
+                              (set-subtract (syntax->datum #'(generic-op-expected ...)) 
+                                            (syntax->datum #'(generic-op* ...))))
+                             ", ")))
+     #:with ([generic-op concrete-op] ...) ; use order from define-typeclass
+            (stx-map
+              (lambda (expected-op) 
+                (stx-findf
+                  (lambda (gen+conc) 
+                    (equal? (syntax->datum (stx-car gen+conc)) 
+                            (syntax->datum expected-op)))
+                #'([generic-op* concrete-op*] ...)))
+              #'(generic-op-expected ...))
+     #:with ([concrete-op+ ty-concrete-op] ...) (infers+erase #'(concrete-op ...))
+     #:when (typechecks? #'(ty-concrete-op ...) #'(ty-concrete-op-expected ...))
+     #:with (mangled-op ...) 
+            (stx-map
+              (lambda (gen-op ty-conc-op)
+                (format-id gen-op "~a~a" gen-op (type-hash-code ty-conc-op)))
+              #'(generic-op ...) #'(ty-concrete-op ...))
+                    #;(format-id #'Name "~a~a" 
+                     #'Name 
+                     (apply format-id #'Name 
+                      (string-join (stx-map (lambda (t) "~a") #'(ty ...)))
+                      (syntax->list #'(ty ...))))
+     #'(begin
+         (define-syntax (mangled-op stx) (syntax-parse stx [_:id #'concrete-op+]))
+         ...)]))

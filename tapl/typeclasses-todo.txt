@@ -1,0 +1,4 @@
+- use uniform type for functions?
+- clean up duplicate code in lambda and define
+- make typeclasses work with type constuctors
+- add typeclass inheritance

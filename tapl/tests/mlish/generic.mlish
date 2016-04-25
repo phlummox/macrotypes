@@ -1,0 +1,111 @@
+#lang s-exp "../../mlish.rkt"
+(require "../rackunit-typechecking.rkt")
+
+(define-typeclass (Ord X)
+  [< : (→ X X Bool)]
+  [<= : (→ X X Bool)]
+  [> : (→ X X Bool)]
+  [>= : (→ X X Bool)])
+
+(define-instance (Ord Int)
+  [< <] [<= <=] [> >] [>= >=])
+
+(define-typeclass (Eq X)
+  [== : (→ X X Bool)])
+
+(define-instance (Eq Int)
+  [== =])
+(define-instance (Eq String)
+  [== string=?])
+
+(check-type (λ ([x : X] #:where (Eq X)) (== x x))
+  : (=>/test (Eq X) (→ X Bool)))
+
+(check-type ((λ ([x : X] #:where (Eq X)) (== x x)) 1) : Bool -> #t)
+(check-type ((λ ([x : X] #:where (Eq X)) (== x x)) "1") : Bool -> #t)
+(typecheck-fail ((λ ([x : X] #:where (Eq X)) (== x x)) #f)
+ #:with-msg 
+ "generic operation == has no instance with type \\(→ Bool Bool Bool\\)")
+
+;; missing typeclass constraint
+(typecheck-fail (λ ([x : X]) (== x x))
+  #:with-msg "==: unbound identifier")
+(typecheck-fail (λ ([x : X]) (<= x x)) 
+  #:with-msg (expected "Int, Int" #:given "X, X"))
+;; wrong typeclass constraint
+(typecheck-fail (λ ([x : Y] #:where (Ord Y)) (== x x))
+  #:with-msg "==: unbound identifier")
+(typecheck-fail (λ ([x : Y] #:where (Eq Y)) (> x x))
+  #:with-msg (expected "Int, Int" #:given "Y, Y"))
+
+(check-type (λ ([x : Y] #:where (Ord Y)) (<= x x))
+  : (=>/test (Ord Y) (→ Y Bool)))
+(check-type (λ ([x : Y] #:where (Ord Y)) (< x x))
+  : (=>/test (Ord Y) (→ Y Bool)))
+(check-type (λ ([x : Y] #:where (Ord Y)) (>= x x))
+  : (=>/test (Ord Y) (→ Y Bool)))
+(check-type (λ ([x : Y] #:where (Ord Y)) (> x x))
+  : (=>/test (Ord Y) (→ Y Bool)))
+
+(check-type (λ ([x : Y] [y : Y] #:where (Ord Y)) (< x x))
+  : (=>/test (Ord Y) (→ Y Y Bool)))
+(check-type (λ ([x : Y] [y : Y] #:where (Ord Y)) (< x y))
+  : (=>/test (Ord Y) (→ Y Y Bool)))
+(check-type (λ ([x : Y] #:where (Ord Y) (Eq Y)) 
+              (< x x))
+  : (=>/test (Ord Y) (Eq Y) (→ Y Bool)))
+(check-type (λ ([x : Y] #:where (Ord Y) (Eq Y)) 
+              (== x x))
+  : (=>/test (Ord Y) (Eq Y) (→ Y Bool)))
+
+(check-type (λ ([x : Y] #:where (Ord Y) (Eq Y)) 
+              (and (== x x) (<= x x)))
+  : (=>/test (Ord Y) (Eq Y) (→ Y Bool)))
+
+;; todo: not working; results in dup ids
+#;(check-type (λ ([x : X] [y : Y] #:where (Ord X) (Ord Y)) (< x y))
+  : (=>/test (Ord Y) (→ Y Y Bool)))
+
+
+
+(define (f [x : X] #:where (Eq X) -> Bool)
+  (== x x))
+(check-type (f 1) : Bool -> #t)
+(check-type (f "1") : Bool -> #t)
+(typecheck-fail (f #f)
+ #:with-msg 
+ "generic operation == has no instance with type \\(→ Bool Bool Bool\\)")
+  
+
+(define-type (TypeA X) (A [x : X] [y : X]))
+
+;; constraint of nested tyvar
+(define (test-a1 [a : (TypeA X)] #:where (Eq X) -> Bool)
+  (== (A-x a) (A-y a)))
+(check-type (test-a1 (A 1 2)) : Bool -> #f)
+(check-type (test-a1 (A "1" "2")) : Bool -> #f)
+(typecheck-fail (test-a1 (A #t #f))
+ #:with-msg 
+ "generic operation == has no instance with type \\(→ Bool Bool Bool\\)")
+
+(define (test-a2 [a : (TypeA X)] [fa : (→ (TypeA X) X)] #:where (Eq X) -> Bool)
+  (== (fa a) (fa a)))
+
+(check-type (test-a2 (A 1 2) (inst A-x Int)) : Bool -> #t)
+(check-type (test-a2 (A "1" "2") (inst A-x String)) : Bool -> #t)
+
+(define-type (Heap X)
+  Emp
+  (H X))
+
+(define (hf [h : (Heap X)] #:where (Ord X) -> Bool)
+  (match h with
+   [Emp -> #f]
+   [H x -> (<= x x)]))
+
+(check-type (hf (H 1)) : Bool -> #t)
+(typecheck-fail (hf (H "1"))
+  #:with-msg 
+ "generic operation.*has no instance with type \\(→ String String Bool\\)")
+
+
