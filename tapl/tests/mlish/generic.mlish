@@ -15,17 +15,18 @@
 
 (define-instance (Eq Int)
   [== =])
-(define-instance (Eq String)
-  [== string=?])
+(define-instance (Eq String) ; test use of lambda on rhs
+  [== (λ ([x : String] [y : String]) 
+        (not (string=? x y)))]) ; to differentiate from Eq Int
 
 (check-type (λ ([x : X] #:where (Eq X)) (== x x))
   : (=>/test (Eq X) (→ X Bool)))
 
 (check-type ((λ ([x : X] #:where (Eq X)) (== x x)) 1) : Bool -> #t)
-(check-type ((λ ([x : X] #:where (Eq X)) (== x x)) "1") : Bool -> #t)
+(check-type ((λ ([x : X] #:where (Eq X)) (== x x)) "1") : Bool -> #f)
 (typecheck-fail ((λ ([x : X] #:where (Eq X)) (== x x)) #f)
- #:with-msg 
- "generic operation == has no instance with type \\(→ Bool Bool Bool\\)")
+ #:with-msg
+ "Eq Bool.*instance undefined.*Cannot instantiate function with constraints.*Eq X.*with.*X : Bool")
 
 ;; missing typeclass constraint
 (typecheck-fail (λ ([x : X]) (== x x))
@@ -71,10 +72,11 @@
 (define (f [x : X] #:where (Eq X) -> Bool)
   (== x x))
 (check-type (f 1) : Bool -> #t)
-(check-type (f "1") : Bool -> #t)
-(typecheck-fail (f #f)
- #:with-msg 
- "generic operation == has no instance with type \\(→ Bool Bool Bool\\)")
+(check-type (f "1") : Bool -> #f)
+(typecheck-fail (f #f) 
+ #:with-msg
+ "Eq Bool.*instance undefined.*Cannot instantiate function with constraints.*Eq X.*with.*X : Bool")
+
   
 
 (define-type (TypeA X) (A [x : X] [y : X]))
@@ -83,16 +85,16 @@
 (define (test-a1 [a : (TypeA X)] #:where (Eq X) -> Bool)
   (== (A-x a) (A-y a)))
 (check-type (test-a1 (A 1 2)) : Bool -> #f)
-(check-type (test-a1 (A "1" "2")) : Bool -> #f)
+(check-type (test-a1 (A "1" "2")) : Bool -> #t)
 (typecheck-fail (test-a1 (A #t #f))
- #:with-msg 
- "generic operation == has no instance with type \\(→ Bool Bool Bool\\)")
+ #:with-msg
+"Eq Bool.*instance undefined.*Cannot instantiate function with constraints.*Eq X.*with.*X : Bool")
 
 (define (test-a2 [a : (TypeA X)] [fa : (→ (TypeA X) X)] #:where (Eq X) -> Bool)
   (== (fa a) (fa a)))
 
 (check-type (test-a2 (A 1 2) (inst A-x Int)) : Bool -> #t)
-(check-type (test-a2 (A "1" "2") (inst A-x String)) : Bool -> #t)
+(check-type (test-a2 (A "1" "2") (inst A-x String)) : Bool -> #f)
 
 (define-type (Heap X)
   Emp
@@ -104,8 +106,13 @@
    [H x -> (<= x x)]))
 
 (check-type (hf (H 1)) : Bool -> #t)
-(typecheck-fail (hf (H "1"))
-  #:with-msg 
- "generic operation.*has no instance with type \\(→ String String Bool\\)")
+(typecheck-fail (hf (H "1")) 
+ #:with-msg 
+ "Ord String.*instance undefined.*Cannot instantiate function with constraints.*Ord X.*with.*X : String")
 
-
+#;(define-instance (Eq (List X)) #:where (Eq X)
+ [== : (λ ([l1 : (List X)] [l2 : (List X)])
+        (match2 (tup l1 l2)
+         [([],[]) -> #t]
+         [(x :: xs, y :: ys) -> (and (== x y) (== xs ys))]
+         [_ -> #f]))])

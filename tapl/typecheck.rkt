@@ -409,9 +409,10 @@
       [(stx-pair? τ) (string-join (stx-map type->str τ)
                                   #:before-first "("
                                   #:after-last ")")]
-      [else (format "~a" (syntax->datum τ))])))
+      [else (format "~a" (syntax->datum τ))]))
+  (define (types->str tys #:sep [sep ", "])
+    (string-join (stx-map type->str tys) sep))
 
-(begin-for-syntax
   (define (mk-? id) (format-id id "~a?" id))
   (define-for-syntax (mk-? id) (format-id id "~a?" id))
   (define (brace? stx)

@@ -860,33 +860,48 @@
        (syntax-parse (inst-types/cs #'Xs #'cs #'((TCX ...) tyX_args))
          [((TC ...) (τ_in ... τ_out)) ; concrete types
           #:with ((_ (_ (_ generic-op) ty-concrete-op) ...) ...) #'(TC ...)
-          #:with (mangled-op ...) 
+          #:with ((mangled-op ...) ...)
                  (stx-map
-                   (lambda (gen-op ty-conc-op)
-                     (format-id gen-op "~a~a" gen-op (type-hash-code ty-conc-op)))
-                   #'(generic-op ... ...) #'(ty-concrete-op ... ...))
+                   (lambda (gen-ops ty-conc-ops)
+                     (stx-map
+                       (lambda (gen-op ty-conc-op)
+                         (format-id gen-op "~a~a" gen-op (type-hash-code ty-conc-op)))
+                       gen-ops ty-conc-ops))
+                   #'((generic-op ...) ...) #'((ty-concrete-op ...) ...))
           #:with (op ...)
-          ;; TODO: errmsg is confusing if op is unused in body
-                 (stx-map
-                  (lambda (mop gen-op ty-conc-op)
-                   (with-handlers 
-                    ([exn:fail:syntax:unbound? 
-                      (lambda (e) 
-                       (type-error #:src stx
-                        #:msg (format "generic operation ~a has no instance with type ~a"
-                               (syntax->datum gen-op)
-                               (type->str
-                                (let* 
-                                 ([old-orig (get-orig ty-conc-op)]
-                                  [new-orig
-                                   (and 
-                                    old-orig
-                                    (substs (stx-map get-orig (lookup-Xs/keep-unsolved #'Xs #'cs)) #'Xs old-orig
-                                            (lambda (x y) 
-                                              (equal? (syntax->datum x) (syntax->datum y)))))])
-                                 (syntax-property ty-conc-op 'orig (list new-orig)))))))])
-                    (expand/df mop)))
-                  #'(mangled-op ...) #'(generic-op ... ...) #'(ty-concrete-op ... ...))
+                 (stx-appendmap
+                  (lambda (mops TC)
+                   (stx-map
+                    (lambda (mop)
+                     (with-handlers 
+                      ([exn:fail:syntax:unbound? 
+                        (lambda (e) 
+                         (type-error #:src stx
+                          #:msg (format 
+                                 (string-append
+                                  "~a instance undefined. "
+                                  "Cannot instantiate function with constraints "
+                                  "~a with:\n  ~a")
+                                 (type->str
+                                  (let* 
+                                   ([old-orig (get-orig TC)]
+                                    [new-orig
+                                     (and 
+                                      old-orig
+                                      (substs (stx-map get-orig (lookup-Xs/keep-unsolved #'Xs #'cs)) #'Xs old-orig
+                                              (lambda (x y) 
+                                               (equal? (syntax->datum x) 
+                                                       (syntax->datum y)))))])
+                                   (syntax-property TC 'orig (list new-orig))))
+                                 (types->str #'(TCX ...))
+                                 (string-join
+                                 (stx-map 
+                                   (lambda (X ty-solved)
+                                     (string-append (type->str X) " : " (type->str ty-solved)))
+                                   #'Xs (lookup-Xs/keep-unsolved #'Xs #'cs)) ", "))))])
+                      (expand/df mop)))
+                    mops))
+                  #'((mangled-op ...) ...) #'(TC ...))
           ;; ) arity check
           #:fail-unless (stx-length=? #'(τ_in ...) #'e_args)
                         (mk-app-err-msg stx #:expected #'(τ_in ...)
@@ -1372,7 +1387,7 @@
    ;;                ty ...)))
      #'(define-syntax (Name stx)
          (syntax-parse stx
-           [(_ X ...) (mk-type #'(('op ty) ...))]))]))
+           [(_ X ...) (add-orig (mk-type #'(('op ty) ...)) #'(Name X ...))]))]))
 
 (define-for-syntax (type-hash-code ty)
   (equal-hash-code (syntax->datum ty)))

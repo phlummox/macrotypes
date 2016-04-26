@@ -2,3 +2,13 @@
 - clean up duplicate code in lambda and define
 - make typeclasses work with type constuctors
 - add typeclass inheritance
+- convert polymorphic primitives to use typeclass constraints
+- properly report conflict when multiple type classes implement the same op
+- use make-rename-transformer to implement mangled-op?
+  - error messages will be worse?
+- overlapping instances
+
+Implementation strategy for basic type classes:
+- do typechecking in define-instance, and not at application
+  - not possible with inherited predicates?, eg (Eq X) => (Eq (List X))
+    - must unify types in define-instance?

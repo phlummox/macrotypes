@@ -42,4 +42,5 @@
 (do-tests 1 "General MLish"
           2 "Shootout and RW OCaml"
           3 "Ben's"
-          4 "Okasaki / polymorphic recursion")
+          4 "Okasaki / polymorphic recursion"
+          5 "Ad hoc polymorphism")
