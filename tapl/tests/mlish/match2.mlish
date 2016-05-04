@@ -296,3 +296,11 @@
     (match2 (tup (BB 1) (BB 2)) with
      [((BB x),(BB y)) -> (+ x y)]
      [_ -> -1]) : Int -> 3)
+
+;; nested :: list pat syntax (requires parens)
+(check-type
+    (match2 (tup (cons 1 nil) (cons 2 nil)) with
+     [(nil,nil) -> #t]
+     [((x :: xs),(y :: ys)) -> (= x y)]
+     [_ -> #t])
+  : Bool -> #f)

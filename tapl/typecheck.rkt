@@ -344,11 +344,14 @@
     (syntax-parse (infer (list e) #:ctx ctx)
       [(_ xs (e+) (τ)) (list #'xs #'e+ #'τ)]))
   (define (infers/ctx+erase ctx es)
-    (stx-cdr (infer es #:ctx ctx)))
+    (stx-cdr (infer es #:ctx ctx))) ; drop the tyctx
   ; tyctx = kind env for bound type vars in term e
   (define (infer/tyctx+erase ctx e)
     (syntax-parse (infer (list e) #:tvctx ctx)
       [(tvs _ (e+) (τ)) (list #'tvs #'e+ #'τ)]))
+  (define (infers/tyctx+erase ctx es)
+    (syntax-parse (infer es #:tvctx ctx)
+      [(tvs+ _ es+ tys) (list #'tvs+ #'es+ #'tys)]))
 
   ; extra indirection, enables easily overriding type=? with sub?
   ; to add subtyping, without changing any other definitions
@@ -423,14 +426,22 @@
     (and paren-shape/#f (char=? paren-shape/#f #\[)))
   ;; todo: abstract out the common shape of a type constructor,
   ;; i.e., the repeated pattern code in the functions below
+  ;; returns the "extra info" in a type, eg variants of a datatype, for use in match
   (define (get-extra-info t)
     (syntax-parse t
       [((~literal #%plain-app) internal-id
         ((~literal #%plain-lambda) bvs
          ((~literal #%expression) ((~literal quote) extra-info-macro)) . tys))
        (expand/df #'(extra-info-macro . tys))]
-      [_ #f])))
-
+      [_ #f]))
+  ;; gets the internal id in a type representation
+  (define (get-type-tag t)
+    (syntax-parse t
+      [((~literal #%plain-app) tycons . _) #'tycons]
+      [X:id #'X]
+      [_ (type-error #:src t #:msg "Can't get internal id: ~a" t)]))
+  (define (get-type-tags ts)
+    (stx-map get-type-tag ts)))
 
 (define-syntax define-basic-checked-id-stx
   (syntax-parser #:datum-literals (:)

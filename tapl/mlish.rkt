@@ -35,6 +35,20 @@
 
 (define-type-constructor => #:arity > 0)
 
+;; type class helper fns
+(begin-for-syntax
+  (define (type-hash-code tys) ; tys should be fully expanded
+    (equal-hash-code (syntax->datum (if (syntax? tys) tys #`#,tys))))
+  (define (mangle o tys)
+    (format-id o "~a~a" o (type-hash-code tys)))
+  ;; pattern expander for type class
+  (define-syntax ~TC
+    (pattern-expander
+     (syntax-parser
+       [(_ [generic-op ty-concrete-op] (~and ooo (~literal ...)))
+        #'((~literal #%plain-app)
+           ((~literal #%plain-app) (_ generic-op) ty-concrete-op) ooo)]))))
+
 ;; type inference constraint solving
 (begin-for-syntax 
   ;; matching possibly polymorphic types
@@ -680,6 +694,12 @@
 
 (define-syntax → ; wrapping →
   (syntax-parser
+    [(_ Xs . rst)
+     #:when (brace? #'Xs)
+     #:with (X ...) #'Xs
+     (syntax-property 
+       #'(∀ (X ...)  (ext-stlc:→ . rst))
+       'orig (list #'(→ . rst)))]
     [(_ . rst) (set-stx-prop/preserved #'(∀ () (ext-stlc:→ . rst)) 'orig (list #'(→ . rst)))]))
 ; special arrow that computes free vars; for use with tests
 ; (because we can't write explicit forall
@@ -727,7 +747,8 @@
    #:with (X ...) (compute-tyvars #'(ty ...))
    (syntax/loc stx (liftedλ {X ...} ([x : ty] ... #:where TC ...) body))]
   ;; TODO: I dont think this works for nested lambdas
-  ;; will re-infer tyvars X that should be bound by outer lam
+  ;; ie, this will will re-infer tyvars X that should be bound by outer lam
+  ;; - tyvars need to be bound in 2nd expand/df
   [(_ (~and Xs (X ...)) ([x:id (~datum :) ty] ... #:where TC ...) body)
    #:when (brace? #'Xs)
    #:with (_ (X+ ...)
@@ -738,30 +759,42 @@
                 (let-syntax 
                   ([X (make-rename-transformer (assign-type #'X #'#%type))] ...)
                   ty ... (void TC ...)))) ; void avoids empty #%app
-   #:with ((_ (_ (_ op) ty-op*) ...) ...) #'(TC+ ...)
-   #:with (o ...) (stx-appendmap 
+   #:with ((~TC [op ty-op*] ...) ...) #'(TC+ ...)
+;   #:with ((_ (_ (_ op) ty-op*) ...) ...) #'(TC+ ...)
+   #:with (o* ...) (stx-appendmap 
                     (lambda (ops tc)
                       (stx-map 
                         (lambda (op) (datum->syntax tc (syntax->datum op)))
                         ops))
                     #'((op ...) ...) #'(TC ...))
+   #:with (o-tmp ...) (generate-temporaries #'(o* ...))
    #:with (ty-op ...) (stx-flatten #'((ty-op* ...) ...))
-   #:with (_ (o+ ...) ; lam
+   #:with (ty_in-tagss ...) 
+          (stx-map 
+            (syntax-parser
+              [(~∀ _ fa-body)
+               (syntax-parse #'fa-body
+                 [(~ext-stlc:→ ty_in ... _) (get-type-tags #'(ty_in ...))]
+                 [(~=> _ ... (~ext-stlc:→ ty_in ... _)) (get-type-tags #'(ty_in ...))])])
+            #'(ty-op ...))
+   #:with (mangled-op ...) (stx-map mangle #'(o* ...) #'(ty_in-tagss ...))
+   #:with (_ (o-tmp+ ...) ; lam
            (_ () (_ () ; let-values
             (_          ; expression
              (_ (x+ ...) ; lam
               (_ () (_ () ; let-values
                body+)))))))
           (expand/df 
-            #'(lambda (o ...)
+            #'(lambda (o-tmp ...)
                (let-syntax 
-                ([o (make-rename-transformer (assign-type #'o #'ty-op))] ...)
+                (;[o (make-rename-transformer (assign-type #'o #'ty-op))] ...
+                 [mangled-op (make-rename-transformer (assign-type #'o-tmp #'ty-op))] ...)
                  (lambda (x ...)
                   (let-syntax
                    ([x (make-rename-transformer (assign-type #'x #'ty+))] ...)
                   body)))))
    #:with ty-out (typeof #'body+)
-   (⊢ (λ (o+ ...) (λ (x+ ...) body+)) 
+   (⊢ (λ (o-tmp+ ...) (λ (x+ ...) body+)) 
       : (∀ (X+ ...) (=> TC+ ... (ext-stlc:→ ty+ ... ty-out))))]
   [(_ ([x:id (~datum :) ty] ...) body) ; no TC
    #:with (X ...) (compute-tyvars #'(ty ...))
@@ -792,6 +825,7 @@
 ;; #%app --------------------------------------------------
 (define-typed-syntax mlish:#%app #:export-as #%app
   [(_ e_fn . e_args)
+;   #:when (printf "app: ~a\n" (syntax->datum #'(e_fn . e_args)))
    ;; ) compute fn type (ie ∀ and →) 
    #:with [e_fn- (~and ty_fn (~∀ Xs ty_fnX #;(~ext-stlc:→ . tyX_args)))] (infer+erase #'e_fn)
    (cond 
@@ -799,7 +833,7 @@
      (define/with-syntax tyX_args
        (syntax-parse #'ty_fnX
          [(~ext-stlc:→ . tyX_args) #'tyX_args]
-         [(~=> _ ... (~ext-stlc:→ . tyX_args))  #'tyX_args]))
+         #;[(~=> _ ... (~ext-stlc:→ . tyX_args))  #'tyX_args]))
      (syntax-parse #'(e_args tyX_args)
        [((e_arg ...) (τ_inX ... _))
         #:fail-unless (stx-length=? #'(e_arg ...) #'(τ_inX ...))
@@ -859,14 +893,19 @@
        ;; ) instantiate polymorphic function type
        (syntax-parse (inst-types/cs #'Xs #'cs #'((TCX ...) tyX_args))
          [((TC ...) (τ_in ... τ_out)) ; concrete types
-          #:with ((_ (_ (_ generic-op) ty-concrete-op) ...) ...) #'(TC ...)
+          #:with ((~TC [generic-op ty-concrete-op] ...) ...) #'(TC ...)
+;          #:with ((_ (_ (_ generic-op) ty-concrete-op) ...) ...) #'(TC ...)
           #:with ((mangled-op ...) ...)
                  (stx-map
-                   (lambda (gen-ops ty-conc-ops)
-                     (stx-map
-                       (lambda (gen-op ty-conc-op)
-                         (format-id gen-op "~a~a" gen-op (type-hash-code ty-conc-op)))
-                       gen-ops ty-conc-ops))
+                   (lambda (gen-ops conc-op-tys)
+                     (stx-map 
+                       mangle 
+                       gen-ops 
+                       (stx-map
+                         (syntax-parser
+                           [(~∀ _ (~ext-stlc:→ ty_in ... _))
+                            (get-type-tags #'(ty_in ...))])
+                         conc-op-tys)))
                    #'((generic-op ...) ...) #'((ty-concrete-op ...) ...))
           #:with (op ...)
                  (stx-appendmap
@@ -1373,31 +1412,83 @@
 (provide define-typeclass define-instance)
 
 ;; adhoc polymorphism
-;; TODO: make this a formal type, or at least define a pattern expander
+;; TODO: make this a formal type?
+;; - or at least define a pattern expander - DONE 2016-05-01
 (define-syntax (define-typeclass stx)
   (syntax-parse stx
     [(_ (Name X ...) [op (~datum :) ty] ...)
-   ;; #:with (_ (X+ ...)
-   ;;         (_ () (_ () ; let-values
-   ;;          ty+ ...)))
-   ;;        (expand/df 
-   ;;          #'(lambda (X ...) 
-   ;;              (let-syntax 
-   ;;                ([X (make-rename-transformer (assign-type #'X #'#%type))] ...)
-   ;;                ty ...)))
-     #'(define-syntax (Name stx)
-         (syntax-parse stx
-           [(_ X ...) (add-orig (mk-type #'(('op ty) ...)) #'(Name X ...))]))]))
-
-(define-for-syntax (type-hash-code ty)
-  (equal-hash-code (syntax->datum ty)))
+     #'(begin
+         (define-syntax (op stx)
+           (syntax-parse stx
+             [(o . es)
+              #:with ([e- ty_e] (... ...)) (infers+erase #'es)
+              ;; mangled-op is selected based on input types,
+              ;; ie, dispatch to different concrete fns based on input tpyes
+              ;; TODO: using just input types, but sometimes may need output type
+              ;; eg, Read typeclass, this is currently unsupported
+              #:with out-op
+              (let L ([tys #'(ty_e (... ...))])
+                (syntax-parse tys
+                 ;; TODO: for now, only handle uniform tys, ie tys must be all
+                 ;;  tycons or all base types or all tyvars
+                 ;; TODO: combine clauses to remove dup code?
+                 ;; tycon --------------------------------------------------
+                 ;; - recur on ty-args
+                 [(((~literal #%plain-app) tycon
+                    ((~literal #%plain-lambda) bvs ei ty-arg)) (... ...))
+                  #:with mangled (mangle #'o #'(tycon (... ...)))
+                  ; dont have to expand to concop here, but gives better errmsg
+                  #:with [conc-op ty-conc-op]
+                         (with-handlers 
+                          ([exn:fail:syntax:unbound? 
+                            (lambda (e) 
+                              (type-error #:src stx
+                               #:msg (format "~a operation undefined for input types: ~a"
+                                      (syntax->datum #'o) (types->str tys))))])
+                          (infer+erase #'mangled))
+                 ;; drop the TCs, because the proper subops are already applied
+                 ;; TODO: is this implemented correctly?
+                 #:with (~∀ Xs (~=> _ (... ...) (~ext-stlc:→ . ty-args))) #'ty-conc-op
+                 #:with ty-conc-op-noTC #'(∀ Xs (ext-stlc:→ . ty-args))
+                 (assign-type #`(conc-op #,(L #'(ty-arg (... ...)))) #'ty-conc-op-noTC)]
+                 ;; base type --------------------------------------------------
+                 [(((~literal #%plain-app) tag) (... ...))
+                  #:with mangled (mangle #'o #'(tag (... ...)))
+                         (with-handlers 
+                          ([exn:fail:syntax:unbound? 
+                            (lambda (e) 
+                              (type-error #:src stx
+                               #:msg (format "~a operation undefined for input types: ~a"
+                                      (syntax->datum #'o) (types->str tys))))])
+                          (expand/df #'mangled))]
+                 ;; tyvars --------------------------------------------------
+                 [_
+                  #:with mangled (mangle #'o tys)
+                         (with-handlers 
+                          ([exn:fail:syntax:unbound? 
+                            (lambda (e) 
+                              (type-error #:src stx
+                               #:msg (format "~a operation undefined for input types: ~a"
+                                      (syntax->datum #'o) (types->str tys))))])
+                          (expand/df #'mangled))]))
+              #:with app (datum->syntax #'o '#%app)
+              ;; for now, #%app will expand (already expanded) (conc-op e- ...) again
+              #'(app out-op e- (... ...))])) ...
+         (define-syntax (Name stx)
+           (syntax-parse stx
+             [(_ X ...) 
+              (add-orig 
+                (mk-type #'(('op ty) ...))
+                #'(Name X ...))])))]))
 
 (define-syntax (define-instance stx)
   (syntax-parse stx
-    [(_ (Name ty ...) [generic-op* concrete-op*] ...) ; unsorted
-     #:with (_ (_ (_ generic-op-expected) ty-concrete-op-expected) ...)
-            ((current-type-eval) #'(Name ty ...))
-     #:fail-unless (set=? (syntax->datum #'(generic-op* ...)) 
+    ;; TODO: combine all clauses?
+    ;; base type --------------------------------------------------
+    [(_ (Name ty ...) [generic-op concrete-op] ...)
+     #:with (~TC [generic-op-expected ty-concrete-op-expected] ...) 
+            (expand/df #'(Name ty ...))
+     #:fail-unless (set=? (syntax->datum #'(generic-op ...)) 
                           (syntax->datum #'(generic-op-expected ...)))
                    (type-error #:src stx
                     #:msg (format "Type class instance ~a incomplete, missing: ~a"
@@ -1405,29 +1496,174 @@
                             (string-join
                              (map symbol->string 
                               (set-subtract (syntax->datum #'(generic-op-expected ...)) 
-                                            (syntax->datum #'(generic-op* ...))))
+                                            (syntax->datum #'(generic-op ...))))
                              ", ")))
-     #:with ([generic-op concrete-op] ...) ; use order from define-typeclass
+     ;; sort, using order from define-typeclass
+     #:with ([generic-op-sorted concrete-op-sorted] ...) 
             (stx-map
               (lambda (expected-op) 
-                (stx-findf
-                  (lambda (gen+conc) 
-                    (equal? (syntax->datum (stx-car gen+conc)) 
-                            (syntax->datum expected-op)))
-                #'([generic-op* concrete-op*] ...)))
+                  (stx-findf
+                    (lambda (gen+conc) 
+                      (equal? (syntax->datum (stx-car gen+conc)) 
+                              (syntax->datum expected-op)))
+                  #'([generic-op concrete-op] ...)))
               #'(generic-op-expected ...))
-     #:with ([concrete-op+ ty-concrete-op] ...) (infers+erase #'(concrete-op ...))
+     ;; typecheck type of given concrete-op with expected type from define-typeclass
+     ;; - TODO: is this necessary?
+     #:with ([concrete-op+ ty-concrete-op] ...) (infers+erase #'(concrete-op-sorted ...))
      #:when (typechecks? #'(ty-concrete-op ...) #'(ty-concrete-op-expected ...))
-     #:with (mangled-op ...) 
-            (stx-map
-              (lambda (gen-op ty-conc-op)
-                (format-id gen-op "~a~a" gen-op (type-hash-code ty-conc-op)))
-              #'(generic-op ...) #'(ty-concrete-op ...))
-                    #;(format-id #'Name "~a~a" 
-                     #'Name 
-                     (apply format-id #'Name 
-                      (string-join (stx-map (lambda (t) "~a") #'(ty ...)))
-                      (syntax->list #'(ty ...))))
+     ;; generate mangled name from tags in input types
+     #:with (ty_in-tags ...) 
+            (stx-map 
+              (syntax-parser
+                [(~∀ _ (~ext-stlc:→ ty_in ... _))
+                 (get-type-tags #'(ty_in ...))])
+              #'(ty-concrete-op-expected ...))
+     ;; use input types
+     #:with (mangled-op ...) (stx-map mangle #'(generic-op ...) #'(ty_in-tags ...))
      #'(begin
-         (define-syntax (mangled-op stx) (syntax-parse stx [_:id #'concrete-op+]))
+         (define-syntax (mangled-op stx) 
+           (syntax-parse stx [_:id (assign-type #'concrete-op+ #'ty-concrete-op-expected)]))
+         ...)]
+    ;; tycon ------------------------------------------------------------------
+    [(_ TC ... (~datum =>) (Name ty ...) [generic-op concrete-op] ...)
+     #:with (X ...) (compute-tyvars #'(ty ...))
+     #:with (Xs+ (TC+ ... (~TC [generic-op-expected ty-concrete-op-expected] ...)) _)
+            (infers/tyctx+erase #'([X : #%type] ...) #'(TC ... (Name ty ...)))
+     ;; simulate as if the declared concrete-op* has TC ... predicates
+     ;; TODO: fix this manual deconstruction and assembly
+     #:with ((app fa (lam _ ei ty_fn)) ...) #'(ty-concrete-op-expected ...)
+     #:with (ty-concrete-op-expected-withTC ...) 
+            (stx-map (current-type-eval) #'((app fa (lam Xs+ ei (=> TC+ ... ty_fn))) ...))
+     #:fail-unless (set=? (syntax->datum #'(generic-op ...)) 
+                          (syntax->datum #'(generic-op-expected ...)))
+                   (type-error #:src stx
+                    #:msg (format "Type class instance ~a incomplete, missing: ~a"
+                            (syntax->datum #'(Name ty ...))
+                            (string-join
+                             (map symbol->string 
+                              (set-subtract (syntax->datum #'(generic-op-expected ...)) 
+                                            (syntax->datum #'(generic-op ...))))
+                             ", ")))
+     ;; - sort, using order from define-typeclass
+     ;; - insert TC ... if lambda
+     #:with ([generic-op-sorted concrete-op-sorted] ...) 
+            (stx-map
+              (lambda (expected-op) 
+                (syntax-parse
+                  (stx-findf
+                    (lambda (gen+conc) 
+                      (equal? (syntax->datum (stx-car gen+conc)) 
+                              (syntax->datum expected-op)))
+                  #'([generic-op concrete-op] ...))
+                  [(g c) 
+                   (syntax-parse #'c
+                     ;; add TCs to (unexpanded) lambda
+                     [((~and lam (~literal liftedλ)) (args ...) . body) 
+                      #'(g (lam (args ... #:where TC ...) . body))]
+                     [_ #'(g c)])]))
+              #'(generic-op-expected ...))
+     ;; ;; for now, dont expand (and typecheck) concrete-op
+     ;; #:with ([concrete-op+ ty-concrete-op] ...) (infers+erase #'(concrete-op ...))
+     ;;        #:when (stx-map (compose pretty-print syntax->datum) #'(ty-concrete-op ...))
+     ;;        #:when (stx-map (compose pretty-print syntax->datum) #'(ty-concrete-op-expected ...))
+     ;; #:when (typechecks? #'(ty-concrete-op ...) #'(ty-concrete-op-expected ...))
+     #:with (ty_in-tags ...) 
+            (stx-map 
+              (syntax-parser
+                [(~∀ _ (~ext-stlc:→ ty_in ... _))
+                 (get-type-tags #'(ty_in ...))]
+                #;[(~∀ _ (~=> _ ... (~ext-stlc:→ ty_in ... _)))
+                 (get-type-tags #'(ty_in ...))])
+              #'(ty-concrete-op-expected ...))
+     #:with (mangled-op ...) (stx-map mangle #'(generic-op ...) #'(ty_in-tags ...))
+     ;; need a name for concrete-op because concrete-op and generic-op may be
+     ;; mutually recursive, eg (Eq (List X))
+     #:with (f ...) (generate-temporaries #'(concrete-op-sorted ...))
+     #'(begin
+         (define f concrete-op-sorted) ...
+         (define-syntax (mangled-op stx) 
+           (syntax-parse stx [_:id (assign-type #'f #'ty-concrete-op-expected-withTC)]))
          ...)]))
+    ;; ;; combined clause:
+    ;; [(_ (~optional (~seq TC ... (~datum =>)) #:defaults ([(TC 1) null]))
+    ;;     (Name ty ...) [generic-op* concrete-op*] ...) ; unsorted
+    ;;  #:with (X ...) (compute-tyvars #'(ty ...))
+    ;;  #:with (Xs+ (TC+ ... (_ (_ (_ generic-op-expected) ty-concrete-op-expected*) ...)) _)
+    ;;         (infers/tyctx+erase #'([X : #%type] ...) #'(TC ... (Name ty ...)))
+    ;;  ;; simulate as if the declared concrete-op* has TC ... predicates
+    ;;  ;; TODO: fix this manual deconstruction
+    ;;  #:with ((app fa (lam  _ ei ty_fn)) ...) #'(ty-concrete-op-expected* ...)
+    ;;  #:with (ty-concrete-op-expected ...) 
+    ;;         (if (stx-null? #'(TC ...))
+    ;;             #'((app fa (lam Xs+ ei ty_fn)) ...)
+    ;;             (stx-map (current-type-eval) #'((app fa (lam Xs+ ei (=> TC+ ... ty_fn))) ...)))
+    ;;  #:fail-unless (set=? (syntax->datum #'(generic-op* ...)) 
+    ;;                       (syntax->datum #'(generic-op-expected ...)))
+    ;;                (type-error #:src stx
+    ;;                 #:msg (format "Type class instance ~a incomplete, missing: ~a"
+    ;;                         (syntax->datum #'(Name ty ...))
+    ;;                         (string-join
+    ;;                          (map symbol->string 
+    ;;                           (set-subtract (syntax->datum #'(generic-op-expected ...)) 
+    ;;                                         (syntax->datum #'(generic-op* ...))))
+    ;;                          ", ")))
+    ;;  ;; convert concrete-op* to concrete-op:
+    ;;  ;; - sort, using order from define-typeclass
+    ;;  ;; - insert TC ... if lambda
+    ;;  #:with ([generic-op concrete-op] ...) 
+    ;;         (stx-map
+    ;;           (lambda (expected-op) 
+    ;;             (syntax-parse
+    ;;               (stx-findf
+    ;;                 (lambda (gen+conc) 
+    ;;                   (equal? (syntax->datum (stx-car gen+conc)) 
+    ;;                           (syntax->datum expected-op)))
+    ;;               #'([generic-op* concrete-op*] ...))
+    ;;               [(g c) 
+    ;;                (if (stx-null? #'(TC ...))
+    ;;                    #'(g c)
+    ;;                    (syntax-parse #'c
+    ;;                      [((~and lam (~literal liftedλ)) (args ...) . body) 
+    ;;                       #'(g (lam (args ... #:where TC ...) . body))]
+    ;;                      [_ #'(g c)]))]))
+    ;;           #'(generic-op-expected ...))
+    ;;  ;; ;; for now, dont expand (and typecheck) concrete-op
+    ;;  ;; #:with ([concrete-op+ ty-concrete-op] ...) (infers+erase #'(concrete-op ...))
+    ;;  ;;        #:when (stx-map (compose pretty-print syntax->datum) #'(ty-concrete-op ...))
+    ;;  ;;        #:when (stx-map (compose pretty-print syntax->datum) #'(ty-concrete-op-expected ...))
+    ;;  ;; #:when (typechecks? #'(ty-concrete-op ...) #'(ty-concrete-op-expected ...))
+    ;;  #:with (ty_ins ...) 
+    ;;         (stx-map 
+    ;;           (syntax-parser
+    ;;             [(~∀ _ fa-body)
+    ;;              (syntax-parse #'fa-body
+    ;;                [(~ext-stlc:→ ty_in ... _) #'(ty_in ...)]
+    ;;                [(~=> _ ... (~ext-stlc:→ ty_in ... _)) #'(ty_in ...)])])
+    ;;           #'(ty-concrete-op-expected ...))
+    ;;  ;; need a name for concrete-op because concrete-op and generic-op may be
+    ;;  ;; mutually recursive, eg (Eq (List X))
+    ;;  #:with (f ...) (generate-temporaries #'(concrete-op ...))
+    ;;  ;; use full fn type, sometimes parameter is output type, eg Read typeclass
+    ;;  #:with (mangled-op1 ...) 
+    ;;         (stx-map
+    ;;           (lambda (gen-op op-conc-ty)
+    ;;             (format-id gen-op "~a~a" gen-op (type-hash-code op-conc-ty)))
+    ;;           #'(generic-op ...) #'(ty-concrete-op-expected ...))
+    ;;  ;; use input types, is sometimes easier
+    ;;  #:with (mangled-op2 ...) 
+    ;;         (stx-map
+    ;;           (lambda (gen-op op-conc-ty)
+    ;;             (format-id gen-op "~a~a" gen-op (type-hash-code op-conc-ty)))
+    ;;           #'(generic-op ...) #'(ty_ins ...))
+    ;;  #'(begin
+    ;;      (define f concrete-op) ...
+    ;;      (define-syntax (mangled-op1 stx) 
+    ;;        (syntax-parse stx [_:id (assign-type #'f #'ty-concrete-op-expected)]))
+    ;;      ...
+    ;;      (define-syntax (mangled-op2 stx) 
+    ;;        (syntax-parse stx [_:id (assign-type #'f #'ty-concrete-op-expected)]))
+    ;;      ...)]))
+
+; [(→? #'ty_e) #'(∀ () ty_e)]
+; [(=>? #'ty_e) #'(∀ () ty_e)]

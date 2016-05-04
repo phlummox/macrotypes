@@ -1,14 +1,65 @@
+2016-04-25:
+
+Added basic type classes, eg Ord and Eq; remaining todo sketch:
+
 - use uniform type for functions?
 - clean up duplicate code in lambda and define
-- make typeclasses work with type constuctors
-- add typeclass inheritance
+- make typeclasses work with type constuctors, eg Functor (ie Mappable)
+- add typeclass inheritance, eg (Eq X) => (Ord X), (Eq X) => (Eq (List X))
 - convert polymorphic primitives to use typeclass constraints
 - properly report conflict when multiple type classes implement the same op
 - use make-rename-transformer to implement mangled-op?
   - error messages will be worse?
 - overlapping instances
 
+2016-04-26
 Implementation strategy for basic type classes:
+- define-typeclass: defines macro expanding to list of bindings
+- define-instance: 
+  - typecheck given concrete ops against type from define-typeclass
+  - define a rename-transformer mapping a mangled name 
+    (computed from generic op + eqhashcode of concrete input types)
+    to a concrete op
+- add extra #:where TC ... clause in lambda and define
+  - wraps functions with another function that consumes the ops
+    specified by the given TC ...
+- these wrapped functions have a (=> TC ... (-> ty_in .. ty_out)) type
+- #%app, when seeing a fn with => type, computes the concrete ops by computing 
+  the mangled names, and then first applying the outer lambda to these ops
+
+Problems with implementation from 2016-04-26:
+- does not support inheritance, eg (Eq X) => (Eq (List X))
 - do typechecking in define-instance, and not at application
   - not possible with inherited predicates?, eg (Eq X) => (Eq (List X))
     - must unify types in define-instance?
+- can no longer typecheck fn bodies at definition
+  - bc higher-order fn may have predicates that require rewriting body
+    - but these are unknown until #%app (ie instantiation) of outer fn
+    - requires local instance declarations for tyvars?
+- Can't directly bind name of generic op, eg ==, in functions, bc it may get 
+  used at different types, see (Eq (List X)). It must be a macro.
+
+2016-04-27
+Proposed alternative solution:
+- define-typeclass:
+  - define a macro for each op that dispatches to a mangled op, 
+    based on concrete types of inputs
+- define-instance:
+  - accepts extra #:where TC ...
+  - define mangled name id macros:
+    - may be rename-transformers (like before)
+    - may expand to further applications, eg (Eq (List x))
+- lambda and define
+  - wrap with outer lambda as before
+  - must define local rename-transformer corresponding to the concrete op
+    (passed in as arg in outer lambda) with types X (ie tyvar)
+- #%app: same as before
+
+Now supports examples like:
+(define-instance (Eq X) => (Eq (List X))
+ [== (λ ([l1 : (List X)] [l2 : (List X)])
+       (match2 (tup l1 l2) with
+        [(nil,nil) -> #t]
+        [((x :: xs),(y :: ys)) -> (and (== x y) (== xs ys))]
+        [_ -> #f]))])
+

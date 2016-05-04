@@ -1,5 +1,5 @@
 #lang racket/base
-(require syntax/stx racket/list version/utils)
+(require syntax/stx racket/list version/utils racket/pretty)
 (provide (all-defined-out))
 
 (define (stx-cadr stx) (stx-car (stx-cdr stx)))
@@ -92,3 +92,11 @@
        (let ([stx* (list* '#%app #'id (cdr (syntax-e stx)))])
          (datum->syntax stx stx* stx))])))
 
+(define (print-stx stx)
+  (pretty-print 
+    (syntax->datum 
+      (if (syntax? stx) stx #`#,stx))))
+  
+(define (print-stxs stx)
+  (stx-map print-stx stx))
+      
