@@ -335,8 +335,8 @@
 ;; nested lambdas
 
 (check-type (λ ([x : X]) (λ ([y : X]) y)) : (→/test X (→ X X)))
-(check-not-type (λ ([x : X]) (λ ([y : X]) y)) : (→/test {X} X (→/test {Y} Y Y)))
-(check-type (λ ([x : X]) (λ ([y : Y]) y)) : (→/test {X} X (→/test {Y} Y Y)))
+(check-not-type (λ ([x : X]) (λ ([y : X]) y)) : (→/test X (→ Y Y)))
+(check-type (λ ([x : X]) (λ ([y : Y]) y)) : (→/test X (→ Y Y)))
 (check-not-type (λ ([x : X]) (λ ([y : Y]) x)) : (→/test X (→ X X)))
 
 (check-type 
@@ -354,7 +354,7 @@
 
 (check-type 
   ((λ ([x : X]) (λ ([y : Y]) (λ ([z : Z]) z))) 1)
-  : (→/test {Y} Y (→/test {Z} Z Z)))
+  : (→/test Y (→ Z Z)))
 
 (check-type (inst Cons (→/test X X))
   : (→ (→/test X X) (List (→/test X X)) (List (→/test X X))))
@@ -368,6 +368,7 @@
 (define nn-1 (nn 1))
 (check-type (nn-1) : (× Int (→ String String)))
 (check-type (nn-1) : (× Int (→ (List Int) (List Int))))
+(check-type (λ () (nn 1)) : (→/test (→ (× Int (→ Y Y)))))
 
 (define (nn2 [x : X] -> (→ (× X (→ Y Y) (List Z))))
   (λ () (tup x (λ ([x : Y]) x) Nil)))
@@ -377,6 +378,7 @@
 ;; test inst order
 (check-type ((inst nn2-1 String (List Int))) : (× Int (→ String String) (List (List Int))))
 (check-type ((inst nn2-1 (List Int) String)) : (× Int (→ (List Int) (List Int)) (List String)))
+(check-type (λ () (nn2 1)) : (→/test (→ (× Int (→ Y Y) (List Z)))))
 
 (define-type (Result A B)
   (Ok A)
