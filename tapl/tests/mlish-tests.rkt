@@ -32,11 +32,11 @@
   (Cons X (List X)))
 
 ;; arity err
-(typecheck-fail (Cons 1) #:with-msg "Cons.+Wrong number of arguments")
+(typecheck-fail (Cons 1) #:with-msg "Cons.+fewer types than expected\n  expected: X, \\(List X\\)\n  given: Int")
 
 ;; type err
 (typecheck-fail (Cons 1 1)
-  #:with-msg (expected "Int, (List Int)" #:given "Int, Int"))
+  #:with-msg "couldn't unify \\(List X\\) and Int")
   
 ;; check Nil still available as tyvar
 (define (f11 [x : Nil] -> Nil) x)
@@ -54,8 +54,8 @@
 (define (g2 [lst : (List Y)] → (List Y)) lst)
 (check-type g2 : (→/test (List Y) (List Y)))
 (typecheck-fail (g2 1) 
-  #:with-msg 
-  (expected "(List Y)" #:given "Int"))
+  #:with-msg
+  "couldn't unify \\(List Y\\) and Int")
 
 ;; todo? allow polymorphic nil?
 (check-type (g2 (Nil {Int})) : (List Int) ⇒ (Nil {Int}))
@@ -113,7 +113,7 @@
 (check-type (map add1 (Cons 1 (Cons 2 (Cons 3 Nil)))) 
   : (List Int) ⇒ (Cons 2 (Cons 3 (Cons 4 Nil))))
 (typecheck-fail (map add1 (Cons "1" Nil))
-  #:with-msg (expected "Int, (List Int)" #:given "String, (List Int)"))
+  #:with-msg "expected: \\(→ X Y\\), \\(List X\\)\n *given: \\(→ Int Int\\), \\(List X\\)")
 (check-type (map (λ ([x : Int]) (+ x 2)) (Cons 1 (Cons 2 (Cons 3 Nil)))) 
   : (List Int) ⇒ (Cons 3 (Cons 4 (Cons 5 Nil))))
 ;; ; doesnt work yet: all lambdas need annotations
@@ -239,18 +239,22 @@
 (check-type (Leaf 10) : (Tree Int))
 (check-type (Node (Leaf 10) (Leaf 11)) : (Tree Int))
 
-(typecheck-fail Nil #:with-msg "add annotations")
+(define (make-nil → (List A))
+  Nil)
+(define (take-nil [loa : (List A)] → Int)
+  0)
+(check-type make-nil : (→/test (List A)) -> make-nil)
+(check-type (take-nil Nil) : Int -> 0)
 (typecheck-fail (Cons 1 (Nil {Bool}))
- #:with-msg 
- (expected "Int, (List Int)" #:given "Int, (List Bool)"
-  #:note "Type error applying.*Cons"))
+ #:with-msg
+ "couldn't unify .+ and Bool\n *expected: X, \\(List X\\)\n *given: Int, \\(List Bool\\)")
 (typecheck-fail (Cons {Bool} 1 (Nil {Int}))
  #:with-msg 
  (expected "Bool, (List Bool)" #:given "Int, (List Int)"
   #:note "Type error applying.*Cons"))
 (typecheck-fail (Cons {Bool} 1 Nil)
  #:with-msg 
- (expected "Bool, (List Bool)" #:given "Int, (List Bool)"
+ (expected "Bool, (List Bool)" #:given "Int, (List X)"
   #:note "Type error applying.*Cons"))
 
 (typecheck-fail (match Nil with [Cons x xs -> 2] [Nil -> 1])
@@ -635,8 +639,8 @@
 (check-type (if "true" 1 2) : Int -> 1)
 (typecheck-fail
  (if #t 1 "2")
- #:with-msg 
- "branches have incompatible types: Int and String")
+ #:with-msg
+ "couldn't unify Int and String")
 
 ;; tests from stlc+lit-tests.rkt --------------------------
 ; most should pass, some failing may now pass due to added types/forms

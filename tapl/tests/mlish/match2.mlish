@@ -62,7 +62,7 @@
 (typecheck-fail
   (match2 (B 1) with
    [B x -> x]) 
-  #:with-msg (expected "(× X X)" #:given "Int"))
+  #:with-msg "couldn't unify \\(× X X\\) and Int")
 
 (check-type
   (match2 (B (tup 2 3)) with
