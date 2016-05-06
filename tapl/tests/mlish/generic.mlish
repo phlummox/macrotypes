@@ -127,9 +127,17 @@
   (square x))
 (check-type (square2 5) : Int -> 25)
 (check-type (square2 2.5) : Float -> 6.25)
-#;(define (squares [xy : (× X Y)] #:where (Num X) (Num Y) -> (× X Y))
-  (match2 xy with
-   [(x,y) -> (tup (square x) (square y))]))
+(define (squares [xyz : (× X Y Z)] #:where (Num X) (Num Y) (Num Z)-> (× X Y Z))
+  (match2 xyz with
+   [(x,y,z) -> (tup (square x) (square y) (square z))]))
+(check-type (squares (tup 5 5 5)) : (× Int Int Int) -> (tup 25 25 25))
+(check-type (squares (tup 2.5 5 5)) : (× Float Int Int) -> (tup 6.25 25 25))
+(check-type (squares (tup 5 2.5 5)) : (× Int Float Int) -> (tup 25 6.25 25))
+(check-type (squares (tup 5 5 2.5)) : (× Int Int Float) -> (tup 25 25 6.25))
+(check-type (squares (tup 2.5 2.5 2.5)) : (× Float Float Float) -> (tup 6.25 6.25 6.25))
+(typecheck-fail (squares (tup 5 5 #f)) #:with-msg "\\(Num Bool\\) instance undefined")
+(typecheck-fail (squares (tup 5 #f 5)) #:with-msg "\\(Num Bool\\) instance undefined")
+(typecheck-fail (squares (tup #f 5 5)) #:with-msg "\\(Num Bool\\) instance undefined")
 
 ;; --------------------------------------------------
 
