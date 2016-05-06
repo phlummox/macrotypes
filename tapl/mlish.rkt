@@ -797,7 +797,8 @@
                          (expand/df 
                           #'(lambda (op-tmp* (... ...))
                              (let-syntax 
-                              ([mangled-op (make-rename-transformer (assign-type #'op-tmp* #'ty-op*))] (... ...))
+                              ([mangled-op 
+                                (make-rename-transformer (assign-type #'op-tmp* #'ty-op*))] (... ...))
                               (lambda (y (... ...))
                                (let-syntax
                                 ([y (make-rename-transformer (assign-type #'y #'ty+))] (... ...))
@@ -855,7 +856,8 @@
     [else
      (syntax-parse #'ty_fnX
       ;; TODO: combine these two clauses
-      [(~ext-stlc:→ . tyX_args) ;; no typeclasses, duplicate code for now
+      ;; no typeclasses, duplicate code for now --------------------------------
+      [(~ext-stlc:→ . tyX_args) 
        ;; ) solve for type variables Xs
        (define/with-syntax ((e_arg1- ...) (unsolved-X ...) cs) (solve #'Xs #'tyX_args stx))
        ;; ) instantiate polymorphic function type
@@ -897,7 +899,7 @@
                                 (raise-app-poly-infer-error stx #'(τ_in ...) #'(τ_arg ...) #'e_fn))
                               #'(∀ (unsolved-X ... Y ...) τ_out)]))
          (⊢ (#%app e_fn- e_arg- ...) : τ_out*)])]
-      ;; handle type class constraints
+      ;; handle type class constraints ----------------------------------------
       [(~=> TCX ... (~ext-stlc:→ . tyX_args))
        ;; ) solve for type variables Xs
        (define/with-syntax ((e_arg1- ...) (unsolved-X ...) cs) (solve #'Xs #'tyX_args stx))
@@ -911,7 +913,7 @@
                    (lambda (gen-ops conc-op-tys)
                      (stx-map 
                        mangle 
-                       gen-ops 
+                       (stx-map (lambda (o) (format-id stx "~a" o)) gen-ops)
                        (stx-map
                          (syntax-parser
                            [(~∀ _ (~ext-stlc:→ ty_in ... _))

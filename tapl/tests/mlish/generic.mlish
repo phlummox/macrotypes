@@ -123,8 +123,10 @@
 (check-type (square 5) : Int -> 25)
 (check-type (square 2.5) : Float -> 6.25)
 ;; "propagation" of typeclass constraints to other constrained fns
-#;(define (square2 [x : X] #:where (Num X) -> X)
+(define (square2 [x : X] #:where (Num X) -> X)
   (square x))
+(check-type (square2 5) : Int -> 25)
+(check-type (square2 2.5) : Float -> 6.25)
 #;(define (squares [xy : (× X Y)] #:where (Num X) (Num Y) -> (× X Y))
   (match2 xy with
    [(x,y) -> (tup (square x) (square y))]))
