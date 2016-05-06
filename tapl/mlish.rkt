@@ -220,7 +220,7 @@
    ;; TODO: check that specified return type is correct
    ;; - currently cannot do it here; to do the check here, need all types of
    ;;  top-lvl fns, since they can call each other
-   #:with (~and ty_fn_expected (~∀ _ (~ext-stlc:→ _ ... out_expected))) 
+   #:with ty_fn_expected
           (set-stx-prop/preserved 
            ((current-type-eval) #'(∀ Ys (ext-stlc:→ τ+orig ...)))
            'orig
@@ -751,51 +751,62 @@
   ;; - tyvars need to be bound in 2nd expand/df
   [(_ (~and Xs (X ...)) ([x:id (~datum :) ty] ... #:where TC ...) body)
    #:when (brace? #'Xs)
-   #:with (_ (X+ ...)
-           (_ () (_ () ; let-values
-            ty+ ... (_ _ TC+ ...))))
-          (expand/df 
+   #:with (_ Xs+
+           (_ () (_ () (_ () (_ () ; 2 let-stx = 4 let-values
+            (_ (_ _ TC+ ...) 
+               (_ _ ty+ ...)
+               (_ op-tmps+
+                (_ () (_ ()
+                 ((~literal #%expression)
+                  (_ xs+
+                   (_ () (_ () body+)))))))))))))
+           (expand/df
             #'(lambda (X ...) 
                 (let-syntax 
-                  ([X (make-rename-transformer (assign-type #'X #'#%type))] ...)
-                  ty ... (void TC ...)))) ; void avoids empty #%app
-   #:with ((~TC [op ty-op*] ...) ...) #'(TC+ ...)
-;   #:with ((_ (_ (_ op) ty-op*) ...) ...) #'(TC+ ...)
-   #:with (o* ...) (stx-appendmap 
-                    (lambda (ops tc)
-                      (stx-map 
-                        (lambda (op) (datum->syntax tc (syntax->datum op)))
-                        ops))
-                    #'((op ...) ...) #'(TC ...))
-   #:with (o-tmp ...) (generate-temporaries #'(o* ...))
-   #:with (ty-op ...) (stx-flatten #'((ty-op* ...) ...))
-   #:with (ty_in-tagss ...) 
-          (stx-map 
-            (syntax-parser
-              [(~∀ _ fa-body)
-               (syntax-parse #'fa-body
-                 [(~ext-stlc:→ ty_in ... _) (get-type-tags #'(ty_in ...))]
-                 [(~=> _ ... (~ext-stlc:→ ty_in ... _)) (get-type-tags #'(ty_in ...))])])
-            #'(ty-op ...))
-   #:with (mangled-op ...) (stx-map mangle #'(o* ...) #'(ty_in-tagss ...))
-   #:with (_ (o-tmp+ ...) ; lam
-           (_ () (_ () ; let-values
-            (_          ; expression
-             (_ (x+ ...) ; lam
-              (_ () (_ () ; let-values
-               body+)))))))
-          (expand/df 
-            #'(lambda (o-tmp ...)
-               (let-syntax 
-                (;[o (make-rename-transformer (assign-type #'o #'ty-op))] ...
-                 [mangled-op (make-rename-transformer (assign-type #'o-tmp #'ty-op))] ...)
-                 (lambda (x ...)
-                  (let-syntax
-                   ([x (make-rename-transformer (assign-type #'x #'ty+))] ...)
-                  body)))))
+                 ([X (make-rename-transformer (assign-type #'X #'#%type))] ...)
+                 (let-syntax
+                  ;; must have this inner macro bc body of lambda may require
+                  ;; ops defined by TC to be bound
+                  ([a (syntax-parser [(_)
+                    (syntax-parse (expand/df #'(void TC ... ty ...)) ; must expand in ctx of Xs
+                      [#;((~literal #%plain-app) (~literal void) 
+                        (_ (_ (_ op-sym) ty-op) (... ...)) (... ...))
+                       (_ _ (~and TC+ (~TC [op-sym ty-op] (... ...))) (... ...)
+                            ty+ (... ...))
+                       ;; here, * = flattened list
+                       ;; op* ... = op-sym ... with proper ctx, and then flattened
+                       #:with (op* (... ...))
+                              (stx-appendmap 
+                                (lambda (os tc)
+                                  (stx-map (lambda (o) (format-id tc "~a" o)) os))
+                                #'((op-sym (... ...)) (... ...)) #'(TC ...))
+                       #:with (op-tmp* (... ...)) (generate-temporaries #'(op* (... ...)))
+                       #:with (ty-op* (... ...)) (stx-flatten #'((ty-op (... ...)) (... ...)))
+                       #:with ty-in-tagsss
+                              (stx-map 
+                               (syntax-parser
+                                [(~∀ _ fa-body)
+                                 (get-type-tags
+                                  (syntax-parse #'fa-body
+                                   [(~ext-stlc:→ in (... ...) _) #'(in (... ...))]
+                                   [(~=> _ (... ...) (~ext-stlc:→ in (... ...) _)) #'(in (... ...))]))])
+                               #'(ty-op* (... ...)))
+                         #:with (mangled-op (... ...)) (stx-map mangle #'(op* (... ...)) #'ty-in-tagsss)
+                         #:with (y (... ...)) #'(x ...)
+                         #:with res
+                         (expand/df 
+                          #'(lambda (op-tmp* (... ...))
+                             (let-syntax 
+                              ([mangled-op (make-rename-transformer (assign-type #'op-tmp* #'ty-op*))] (... ...))
+                              (lambda (y (... ...))
+                               (let-syntax
+                                ([y (make-rename-transformer (assign-type #'y #'ty+))] (... ...))
+                                body)))))
+                         #'((void TC+ (... ...)) (void ty+ (... ...)) res)])])])
+                      (a)))))
    #:with ty-out (typeof #'body+)
-   (⊢ (λ (o-tmp+ ...) (λ (x+ ...) body+)) 
-      : (∀ (X+ ...) (=> TC+ ... (ext-stlc:→ ty+ ... ty-out))))]
+   (⊢ (λ op-tmps+ (λ xs+ body+)) 
+      : (∀ Xs+ (=> TC+ ... (ext-stlc:→ ty+ ... ty-out))))]
   [(_ ([x:id (~datum :) ty] ...) body) ; no TC
    #:with (X ...) (compute-tyvars #'(ty ...))
    #:with (~∀ () (~ext-stlc:→ _ ... body-ty)) (get-expected-type stx)
@@ -827,7 +838,7 @@
   [(_ e_fn . e_args)
 ;   #:when (printf "app: ~a\n" (syntax->datum #'(e_fn . e_args)))
    ;; ) compute fn type (ie ∀ and →) 
-   #:with [e_fn- (~and ty_fn (~∀ Xs ty_fnX #;(~ext-stlc:→ . tyX_args)))] (infer+erase #'e_fn)
+   #:with [e_fn- (~and ty_fn (~∀ Xs ty_fnX))] (infer+erase #'e_fn)
    (cond 
     [(stx-null? #'Xs)
      (define/with-syntax tyX_args
@@ -914,7 +925,7 @@
                     (lambda (mop)
                      (with-handlers 
                       ([exn:fail:syntax:unbound? 
-                        (lambda (e) 
+                        (lambda (e)
                          (type-error #:src stx
                           #:msg (format 
                                  (string-append
@@ -964,7 +975,7 @@
                                (define new-orig
                                  (and old-orig
                                       (substs 
-                                          (stx-map get-orig #'tys-solved) #'Xs old-orig
+                                          (stx-map get-orig (lookup-Xs/keep-unsolved #'Xs #'cs)) #'Xs old-orig
                                           (lambda (x y) 
                                             (equal? (syntax->datum x) (syntax->datum y))))))
                                (syntax-property tyin 'orig (list new-orig)))
@@ -1051,7 +1062,10 @@
 (define-primop string : (→ Char String))
 (define-primop sleep : (→ Int Unit))
 (define-primop string=? : (→ String String Bool))
+(define-primop string<? : (→ String String Bool))
 (define-primop string<=? : (→ String String Bool))
+(define-primop string>? : (→ String String Bool))
+(define-primop string>=? : (→ String String Bool))
 
 (define-typed-syntax string-append
   [(_ . strs)
@@ -1509,9 +1523,13 @@
                   #'([generic-op concrete-op] ...)))
               #'(generic-op-expected ...))
      ;; typecheck type of given concrete-op with expected type from define-typeclass
-     ;; - TODO: is this necessary?
      #:with ([concrete-op+ ty-concrete-op] ...) (infers+erase #'(concrete-op-sorted ...))
-     #:when (typechecks? #'(ty-concrete-op ...) #'(ty-concrete-op-expected ...))
+     #:fail-unless (typechecks? #'(ty-concrete-op ...) #'(ty-concrete-op-expected ...))
+                   (mk-app-err-msg (syntax/loc stx (#%app (Name ty ...) concrete-op ...))
+                     #:expected #'(ty-concrete-op-expected ...)
+                     #:given #'(ty-concrete-op ...)
+                     #:action "defining typeclass instance"
+                     #:name (format "~a" (syntax->datum #'(Name ty ...))))
      ;; generate mangled name from tags in input types
      #:with (ty_in-tags ...) 
             (stx-map 

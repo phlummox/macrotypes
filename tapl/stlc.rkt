@@ -77,7 +77,8 @@
 (define-for-syntax (mk-app-err-msg stx #:expected [expected-τs #'()]
                                        #:given [given-τs #'()]
                                        #:note [note ""]
-                                       #:name [name #f])
+                                       #:name [name #f]
+                                       #:action [other #f])
   (syntax-parse stx
     #;[(app . rst)
      #:when (not (equal? '#%app (syntax->datum #'app)))
@@ -91,9 +92,11 @@
        (if name name
            (format "function ~a"
                    (syntax->datum (or (get-orig #'e_fn) #'e_fn)))))
+     (define action (if other other "applying"))
      (string-append
-      (format "~a (~a:~a):\nType error applying "
+      (format "~a (~a:~a):\nType error "
               (syntax-source stx) (syntax-line stx) (syntax-column stx))
+      action " "
       fn-name ". " note "\n"
       (format "  Expected: ~a argument(s) with type(s): " (stx-length expected-τs))
       (types->str expected-τs) "\n"
