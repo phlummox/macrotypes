@@ -25,6 +25,9 @@
 (check-type (== "2" "2") : Bool -> (string=? "2" "2"))
 (check-type (== "2" "2") : Bool -> #t)
 
+(define-instance (Eq Char)
+  [== char=?])
+
 (check-type (λ ([x : X] #:where (Eq X)) 
               (== x x))
   : (=>/test (Eq X) (→ X Bool)))
@@ -34,6 +37,19 @@
 (typecheck-fail ((λ ([x : X] #:where (Eq X)) (== x x)) #f)
  #:with-msg
  "Eq Bool.*instance undefined.*Cannot instantiate function with constraints.*Eq X.*with.*X : Bool")
+
+(define (member? [x : X] [lst : (List X)] #:where (Eq X) -> Bool)
+  (match lst with
+   [[] -> #f]
+   [y :: ys -> (or (== x y) (member? x ys))]))
+
+(check-type (member? 1 nil) : Bool -> #f)
+(check-type (member? 1 (list 2)) : Bool -> #f)
+(check-type (member? 1 (list 2 1)) : Bool -> #t)
+(typecheck-fail (member? "1" (list 1))) ; TODO: fix err msg
+(check-type (member? "1" nil) : Bool -> #f)
+(check-type (member? "1" (list "2")) : Bool -> #f)
+(check-type (member? "1" (list "2" "1")) : Bool -> #t)
 
 ;; TODO?: fix name clash of generic op and concrete op
 (define-typeclass (Ord X)
@@ -215,7 +231,45 @@
 (check-type (list-eq1 (list 1) (list 2)) : Bool -> #f)
 (check-type (list-eq1 (list 1) (list 1 2)) : Bool -> #f)
 
+(check-type (member? (list 1) (list (list 1))) : Bool -> #t)
+(check-type (member? (list 1) (list (list 2))) : Bool -> #f)
+(check-type (member? (list 1) (list (list 2) (list 1))) : Bool -> #t)
+
 ;; TODO: #:where TC, where TC has a tycon, like #:where (List X)
 ;; still doesnt work I dont think
 #;(define (list-eq2 [l1 : (List X)] [l2 : (List X)] #:where (List X) -> Bool)
   (== l1 l2))
+
+(define (andmap [p? : (→ X Bool)] [lst : (List X)] -> Bool)
+  (match lst with
+   [[] -> #t]
+   [x :: xs -> (and (p? x) (andmap p? xs))]))
+
+;; Set
+;; type classes for non-base types: user-defined
+(define-type (Set X) (MkSet (List X)))
+(define-instance (Eq X) => (Eq (Set X))
+ [== (λ ([s1 : (Set X)] [s2 : (Set X)])
+       (match2 (tup s1 s2) with
+        [((MkSet xs),(MkSet ys)) -> (and (andmap (λ ([y : X]) (member? y xs)) ys)
+                                         (andmap (λ ([x : X]) (member? x ys)) xs))]))])
+(check-type (== (MkSet (list 1)) (MkSet (list 1))) : Bool -> #t)
+(check-type (== (MkSet (list 1)) (MkSet (list 2))) : Bool -> #f)
+(check-type (== (MkSet (list 1 2)) (MkSet (list 1 2))) : Bool -> #t)
+(check-type (== (MkSet (list 1 2)) (MkSet (list 2 1))) : Bool -> #t)
+(check-type (== (MkSet (list 1 2)) (MkSet (list 1 2 3))) : Bool -> #f)
+(check-type (== (MkSet (list 3 1 2)) (MkSet (list 1 2 3))) : Bool -> #t)
+
+(check-type (member? (MkSet (list 1 2)) (list (MkSet (list 1 2)))) : Bool -> #t)
+(check-type (member? (MkSet (list 1 2)) (list (MkSet (list 1)) (MkSet (list 2 1)))) 
+  : Bool -> #t)
+(check-type (member? (MkSet (list "1" "2")) (list (MkSet (list "1")) (MkSet (list "2" "1")))) 
+  : Bool -> #t)
+
+;; type classes for non-base types: multiple constraints
+(define-instance (Eq X) (Eq Y) => (Eq (× X Y))
+ [== (λ ([p1 : (× X Y)] [p2 : (× X Y)])
+       (match2 (tup p1 p2) with
+        [((u,v),(x,y)) -> (and (== u x) (== v y))]))])
+
+;(== (tup 1 2) (tup 3 4))

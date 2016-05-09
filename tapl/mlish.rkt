@@ -908,32 +908,21 @@
          [((TC ...) (τ_in ... τ_out)) ; concrete types
           #:with ((~TC [generic-op ty-concrete-op] ...) ...) #'(TC ...)
 ;          #:with ((_ (_ (_ generic-op) ty-concrete-op) ...) ...) #'(TC ...)
-          #:with ((mangled-op ...) ...)
-                 (stx-map
-                   (lambda (gen-ops conc-op-tys)
-                     (stx-map 
-                       mangle 
-                       (stx-map (lambda (o) (format-id stx "~a" o)) gen-ops)
-                       (stx-map
-                         (syntax-parser
-                           [(~∀ _ (~ext-stlc:→ ty_in ... _))
-                            (get-type-tags #'(ty_in ...))])
-                         conc-op-tys)))
-                   #'((generic-op ...) ...) #'((ty-concrete-op ...) ...))
           #:with (op ...)
                  (stx-appendmap
-                  (lambda (mops TC)
-                   (stx-map
-                    (lambda (mop)
-                     (with-handlers 
-                      ([exn:fail:syntax:unbound? 
-                        (lambda (e)
-                         (type-error #:src stx
-                          #:msg (format 
+                   (lambda (gen-ops conc-op-tys TC)
+                     (map 
+                       (lambda (o tys)
+                         (with-handlers 
+                           ([exn:fail:syntax:unbound? 
+                             (lambda (e)
+                               (type-error #:src stx
+                                #:msg 
+                                (format 
                                  (string-append
-                                  "~a instance undefined. "
-                                  "Cannot instantiate function with constraints "
-                                  "~a with:\n  ~a")
+                                     "~a instance undefined. "
+                                   "Cannot instantiate function with constraints "
+                                   "~a with:\n  ~a")
                                  (type->str
                                   (let* 
                                    ([old-orig (get-orig TC)]
@@ -951,9 +940,13 @@
                                    (lambda (X ty-solved)
                                      (string-append (type->str X) " : " (type->str ty-solved)))
                                    #'Xs (lookup-Xs/keep-unsolved #'Xs #'cs)) ", "))))])
-                      (expand/df mop)))
-                    mops))
-                  #'((mangled-op ...) ...) #'(TC ...))
+                         (lookup-op o tys)))
+                       (stx-map (lambda (o) (format-id stx "~a" o #:source stx)) gen-ops)
+                       (stx-map
+                         (syntax-parser
+                           [(~∀ _ (~ext-stlc:→ ty_in ... _)) #'(ty_in ...)])
+                         conc-op-tys)))
+                   #'((generic-op ...) ...) #'((ty-concrete-op ...) ...) #'(TC ...))
           ;; ) arity check
           #:fail-unless (stx-length=? #'(τ_in ...) #'e_args)
                         (mk-app-err-msg stx #:expected #'(τ_in ...)
@@ -1068,6 +1061,11 @@
 (define-primop string<=? : (→ String String Bool))
 (define-primop string>? : (→ String String Bool))
 (define-primop string>=? : (→ String String Bool))
+(define-primop char=? : (→ Char Char Bool))
+(define-primop char<? : (→ Char Char Bool))
+(define-primop char<=? : (→ Char Char Bool))
+(define-primop char>? : (→ Char Char Bool))
+(define-primop char>=? : (→ Char Char Bool))
 
 (define-typed-syntax string-append
   [(_ . strs)
@@ -1427,6 +1425,38 @@
 
 (provide define-typeclass define-instance)
 
+(begin-for-syntax
+ ;; this function should be wrapped with err handlers,
+ ;; for when an op with the specified generic op and input types does not exist,
+ ;; otherwise, will get "unbound id" err with internal mangled id
+ ;;
+ ;; mangled-op is selected based on input types,
+ ;; ie, dispatch to different concrete fns based on input tpyes
+ ;; TODO: using just input types, but sometimes may need output type
+ ;; eg, Read typeclass, this is currently unsupported
+ ;; - need to use expected-type?
+ (define (lookup-op gen-op tys)
+  (syntax-parse tys
+   ;; TODO: for now, only handle uniform tys, ie tys must be all
+   ;;  tycons or all base types or all tyvars
+   ;; TODO: combine clauses to remove dup code?
+   ;; tycon --------------------------------------------------
+   ;; - recur on ty-args
+   [(((~literal #%plain-app) tycon
+     ((~literal #%plain-lambda) bvs ei ty-arg)) ...)
+    #:with mangled (mangle gen-op #'(tycon ...))
+    ;; dont have to expand to concop here, but gives better errmsg
+    #:with [conc-op ty-conc-op] (infer+erase #'mangled)
+    ;; drop the TCs, because the proper subops are already applied
+    ;; TODO: is this implemented correctly?
+    #:with (~∀ Xs (~=> _ ... (~ext-stlc:→ . ty-args))) #'ty-conc-op
+    #:with ty-conc-op-noTC #'(∀ Xs (ext-stlc:→ . ty-args))
+    (⊢ (conc-op #,(lookup-op gen-op #'(ty-arg ...))) : ty-conc-op-noTC)]
+   ;; base type --------------------------------------------------
+   [(((~literal #%plain-app) tag) ...) (expand/df (mangle gen-op #'(tag ...)))]
+   ;; tyvars --------------------------------------------------
+   [_ (expand/df (mangle gen-op tys))])))
+
 ;; adhoc polymorphism
 ;; TODO: make this a formal type?
 ;; - or at least define a pattern expander - DONE 2016-05-01
@@ -1438,55 +1468,14 @@
            (syntax-parse stx
              [(o . es)
               #:with ([e- ty_e] (... ...)) (infers+erase #'es)
-              ;; mangled-op is selected based on input types,
-              ;; ie, dispatch to different concrete fns based on input tpyes
-              ;; TODO: using just input types, but sometimes may need output type
-              ;; eg, Read typeclass, this is currently unsupported
-              #:with out-op
-              (let L ([tys #'(ty_e (... ...))])
-                (syntax-parse tys
-                 ;; TODO: for now, only handle uniform tys, ie tys must be all
-                 ;;  tycons or all base types or all tyvars
-                 ;; TODO: combine clauses to remove dup code?
-                 ;; tycon --------------------------------------------------
-                 ;; - recur on ty-args
-                 [(((~literal #%plain-app) tycon
-                    ((~literal #%plain-lambda) bvs ei ty-arg)) (... ...))
-                  #:with mangled (mangle #'o #'(tycon (... ...)))
-                  ; dont have to expand to concop here, but gives better errmsg
-                  #:with [conc-op ty-conc-op]
-                         (with-handlers 
-                          ([exn:fail:syntax:unbound? 
-                            (lambda (e) 
-                              (type-error #:src stx
-                               #:msg (format "~a operation undefined for input types: ~a"
-                                      (syntax->datum #'o) (types->str tys))))])
-                          (infer+erase #'mangled))
-                 ;; drop the TCs, because the proper subops are already applied
-                 ;; TODO: is this implemented correctly?
-                 #:with (~∀ Xs (~=> _ (... ...) (~ext-stlc:→ . ty-args))) #'ty-conc-op
-                 #:with ty-conc-op-noTC #'(∀ Xs (ext-stlc:→ . ty-args))
-                 (assign-type #`(conc-op #,(L #'(ty-arg (... ...)))) #'ty-conc-op-noTC)]
-                 ;; base type --------------------------------------------------
-                 [(((~literal #%plain-app) tag) (... ...))
-                  #:with mangled (mangle #'o #'(tag (... ...)))
-                         (with-handlers 
-                          ([exn:fail:syntax:unbound? 
-                            (lambda (e) 
-                              (type-error #:src stx
-                               #:msg (format "~a operation undefined for input types: ~a"
-                                      (syntax->datum #'o) (types->str tys))))])
-                          (expand/df #'mangled))]
-                 ;; tyvars --------------------------------------------------
-                 [_
-                  #:with mangled (mangle #'o tys)
-                         (with-handlers 
-                          ([exn:fail:syntax:unbound? 
-                            (lambda (e) 
-                              (type-error #:src stx
-                               #:msg (format "~a operation undefined for input types: ~a"
-                                      (syntax->datum #'o) (types->str tys))))])
-                          (expand/df #'mangled))]))
+              #:with out-op (with-handlers 
+                              ([exn:fail:syntax:unbound? 
+                                (lambda (e) 
+                                  (type-error #:src #'o
+                                   #:msg (format "~a operation undefined for input types: ~a"
+                                                 (syntax->datum #'o) 
+                                                 (types->str #'(ty_e (... ...))))))])
+                              (lookup-op #'o #'(ty_e (... ...))))
               #:with app (datum->syntax #'o '#%app)
               ;; for now, #%app will expand (already expanded) (conc-op e- ...) again
               #'(app out-op e- (... ...))])) ...
