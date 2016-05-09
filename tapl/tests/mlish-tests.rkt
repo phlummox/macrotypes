@@ -257,7 +257,7 @@
 (check-type (Leaf 10) : (Tree Int))
 (check-type (Node (Leaf 10) (Leaf 11)) : (Tree Int))
 
-(typecheck-fail Nil #:with-msg "add annotations")
+(check-type (λ () Nil) : (→/test (List X)))
 (typecheck-fail (Cons 1 (Nil {Bool}))
  #:with-msg 
  "expected: \\(List Int\\)\n *given: \\(List Bool\\)")
@@ -267,7 +267,7 @@
   #:note "Type error applying.*Cons"))
 (typecheck-fail (Cons {Bool} 1 Nil)
  #:with-msg 
- (expected "Bool, (List Bool)" #:given "Int, (List Bool)"
+ (expected "Bool, (List Bool)" #:given "Int, (List X)"
   #:note "Type error applying.*Cons"))
 
 (typecheck-fail (match Nil with [Cons x xs -> 2] [Nil -> 1])
@@ -385,8 +385,8 @@
   : (→ (→/test X X) (List (→/test X X)) (List (→/test X X))))
 (check-type map : (→/test (→ X Y) (List X) (List Y)))
 
-(check-type (Cons (λ ([x : X]) x) Nil)
-  : (List (→/test {X} X X)))
+(check-type (λ () (Cons (λ ([x : X]) x) Nil))
+  : (→/test (List (→ X X))))
 
 (define (nn [x : X] -> (→ (× X (→ Y Y))))
   (λ () (tup x (λ ([x : Y]) x))))
@@ -753,7 +753,7 @@
 (typecheck-fail
  (if #t 1 "2")
  #:with-msg 
- "branches have incompatible types: Int and String")
+ "couldn't unify Int and String")
 
 ;; tests from stlc+lit-tests.rkt --------------------------
 ; most should pass, some failing may now pass due to added types/forms
