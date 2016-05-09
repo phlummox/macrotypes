@@ -1443,7 +1443,7 @@
    ;; tycon --------------------------------------------------
    ;; - recur on ty-args
    [(((~literal #%plain-app) tycon
-     ((~literal #%plain-lambda) bvs ei ty-arg)) ...)
+     ((~literal #%plain-lambda) bvs ei ty-arg ...)) ...)
     #:with mangled (mangle gen-op #'(tycon ...))
     ;; dont have to expand to concop here, but gives better errmsg
     #:with [conc-op ty-conc-op] (infer+erase #'mangled)
@@ -1451,7 +1451,9 @@
     ;; TODO: is this implemented correctly?
     #:with (~∀ Xs (~=> _ ... (~ext-stlc:→ . ty-args))) #'ty-conc-op
     #:with ty-conc-op-noTC #'(∀ Xs (ext-stlc:→ . ty-args))
-    (⊢ (conc-op #,(lookup-op gen-op #'(ty-arg ...))) : ty-conc-op-noTC)]
+    (⊢ (conc-op 
+         #,@(apply stx-map (lambda tys (lookup-op gen-op tys)) (syntax->list #'((ty-arg ...) ...))))
+       : ty-conc-op-noTC)]
    ;; base type --------------------------------------------------
    [(((~literal #%plain-app) tag) ...) (expand/df (mangle gen-op #'(tag ...)))]
    ;; tyvars --------------------------------------------------
@@ -1577,6 +1579,9 @@
      ;;        #:when (stx-map (compose pretty-print syntax->datum) #'(ty-concrete-op ...))
      ;;        #:when (stx-map (compose pretty-print syntax->datum) #'(ty-concrete-op-expected ...))
      ;; #:when (typechecks? #'(ty-concrete-op ...) #'(ty-concrete-op-expected ...))
+     ;; TODO: right now, dont recur to get nested tags
+     ;; but may need to do so, ie if an instance needs to define more than one concrete op,
+     ;; eg (define-instance (Eq (List Int)) ...)
      #:with (ty_in-tags ...) 
             (stx-map 
               (syntax-parser

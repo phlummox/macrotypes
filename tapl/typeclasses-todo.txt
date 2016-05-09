@@ -1,3 +1,12 @@
+2016-05-09
+TODO:
+- lookup concrete op based on return type
+- define instance of non-parameterized non-base type, eg (List Int)
+- subclasses/inheritance, eg (define-instance (Eq X) => (Ord X) ...)
+- define-instance for type constructors, eg (define-instance List ...)
+- support non-fn values in typeclasses
+- write constraints for non-tyvars, eg #:where (List X)
+
 2016-04-25:
 
 Added basic type classes, eg Ord and Eq; remaining todo sketch:
