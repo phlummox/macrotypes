@@ -1,4 +1,4 @@
-#lang s-exp "../fomega3.rkt"
+#lang sweet-exp "../fomega3.rkt"
 (require "rackunit-typechecking.rkt")
 
 (check-type Int : ★)
@@ -83,53 +83,53 @@
 ;(check-type Pair : (→ ★ ★ ★))
 (check-type Pair : (→ ★ ★ (∀★ ★)))
 
-(check-type (Λ ([X : ★] [Y : ★]) (λ ([x : X][y : Y]) x)) : (∀ ([X : ★][Y : ★]) (→ X Y X)))
+(check-type (Λ ([X : ★] [Y : ★]) (λ ([x : X] [y : Y]) x)) : (∀ ([X : ★] [Y : ★]) (→ X Y X)))
 ; parametric pair constructor
 (check-type
- (Λ ([X : ★] [Y : ★]) (λ ([x : X][y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
- : (∀ ([X : ★][Y : ★]) (→ X Y (Pair X Y))))
+ (Λ ([X : ★] [Y : ★]) (λ ([x : X] [y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
+ : (∀ ([X : ★] [Y : ★]) (→ X Y (Pair X Y))))
 ; concrete Pair Int String constructor
 (check-type
- (inst (Λ ([X : ★] [Y : ★]) (λ ([x : X][y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
+ (inst (Λ ([X : ★] [Y : ★]) (λ ([x : X] [y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
        Int String)
  : (→ Int String (Pair Int String)))
 ; Pair Int String value
 (check-type
- ((inst (Λ ([X : ★] [Y : ★]) (λ ([x : X][y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
+ ((inst (Λ ([X : ★] [Y : ★]) (λ ([x : X] [y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
        Int String) 1 "1")
  : (Pair Int String))
 ; fst: parametric
 (check-type
- (Λ ([X : ★][Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p X) (λ ([x : X][y : Y]) x))))
- : (∀ ([X : ★][Y : ★]) (→ (Pair X Y) X)))
+ (Λ ([X : ★] [Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p X) (λ ([x : X] [y : Y]) x))))
+ : (∀ ([X : ★] [Y : ★]) (→ (Pair X Y) X)))
 ; fst: concrete Pair Int String accessor
 (check-type
  (inst
-  (Λ ([X : ★][Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p X) (λ ([x : X][y : Y]) x))))
+  (Λ ([X : ★] [Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p X) (λ ([x : X] [y : Y]) x))))
   Int String)
  : (→ (Pair Int String) Int))
 ; apply fst
 (check-type
  ((inst
-   (Λ ([X : ★][Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p X) (λ ([x : X][y : Y]) x))))
+   (Λ ([X : ★] [Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p X) (λ ([x : X] [y : Y]) x))))
    Int String)
-  ((inst (Λ ([X : ★] [Y : ★]) (λ ([x : X][y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
+  ((inst (Λ ([X : ★] [Y : ★]) (λ ([x : X] [y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
          Int String) 1 "1"))
  : Int ⇒ 1)
 ; snd
 (check-type
- (Λ ([X : ★][Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p Y) (λ ([x : X][y : Y]) y))))
- : (∀ ([X : ★][Y : ★]) (→ (Pair X Y) Y)))
+ (Λ ([X : ★] [Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p Y) (λ ([x : X] [y : Y]) y))))
+ : (∀ ([X : ★] [Y : ★]) (→ (Pair X Y) Y)))
 (check-type
  (inst
-  (Λ ([X : ★][Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p Y) (λ ([x : X][y : Y]) y))))
+  (Λ ([X : ★] [Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p Y) (λ ([x : X] [y : Y]) y))))
   Int String)
  : (→ (Pair Int String) String))
 (check-type
  ((inst
-   (Λ ([X : ★][Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p Y) (λ ([x : X][y : Y]) y))))
+   (Λ ([X : ★] [Y : ★]) (λ ([p : (∀ ([R : ★]) (→ (→ X Y R) R))]) ((inst p Y) (λ ([x : X] [y : Y]) y))))
    Int String)
-  ((inst (Λ ([X : ★] [Y : ★]) (λ ([x : X][y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
+  ((inst (Λ ([X : ★] [Y : ★]) (λ ([x : X] [y : Y]) (Λ ([R : ★]) (λ ([p : (→ X Y R)]) (p x y)))))
          Int String) 1 "1"))
  : String ⇒ "1")
 

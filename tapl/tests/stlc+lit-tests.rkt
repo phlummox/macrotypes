@@ -1,4 +1,4 @@
-#lang s-exp "../stlc+lit.rkt"
+#lang sweet-exp "../stlc+lit.rkt"
 (require "rackunit-typechecking.rkt")
 
 ;; thunk

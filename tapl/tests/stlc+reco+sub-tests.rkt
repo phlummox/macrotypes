@@ -1,4 +1,4 @@
-#lang s-exp "../stlc+reco+sub.rkt"
+#lang sweet-exp "../stlc+reco+sub.rkt"
 (require "rackunit-typechecking.rkt")
 
 ;; record subtyping tests
@@ -30,14 +30,14 @@
 
 (check-type ((λ ([x : (× [a : Int])]) x) (tup [a = 0]))
             : (× [a : Int]) ⇒ (tup [a = 0]))
-(check-type ((λ ([x : (× [a : Int])]) x) (tup [a = 0][b = #t]))
-            : (× [a : Int]) ⇒ (tup [a = 0][b = #t]))
+(check-type ((λ ([x : (× [a : Int])]) x) (tup [a = 0] [b = #t]))
+            : (× [a : Int]) ⇒ (tup [a = 0] [b = #t]))
 
-(check-type (proj ((λ ([x : (× [a : Int])]) x) (tup [a = 0][b = #t])) a)
+(check-type (proj ((λ ([x : (× [a : Int])]) x) (tup [a = 0] [b = #t])) a)
             : Int ⇒ 0)
 
 ;; this should work! but needs bounded quantification, see fsub.rkt
-(typecheck-fail (proj ((λ ([x : (× [a : Int])]) x) (tup [a = 0][b = #t])) b))
+(typecheck-fail (proj ((λ ([x : (× [a : Int])]) x) (tup [a = 0] [b = #t])) b))
 
 ; conditional
 (check-not-type (λ ([x : Int]) (if #t 1 -1)) : (→ Int Nat))

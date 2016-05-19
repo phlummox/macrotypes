@@ -1,4 +1,4 @@
-#lang s-exp "../exist.rkt"
+#lang sweet-exp "../exist.rkt"
 (require "rackunit-typechecking.rkt")
 
 (check-type (pack (Int 0) as (∃ (X) X)) : (∃ (X) X))

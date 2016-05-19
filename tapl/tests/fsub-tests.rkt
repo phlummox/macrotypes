@@ -1,4 +1,4 @@
-#lang s-exp "../fsub.rkt"
+#lang sweet-exp "../fsub.rkt"
 (require "rackunit-typechecking.rkt")
 
 ;; examples from tapl ch26, bounded quantification
@@ -8,26 +8,26 @@
 (define ra (tup [a = 0]))
 (check-type ((λ ([x : (× [a : Int])]) x) ra)
             : (× [a : Int]) ⇒ (tup [a = 0]))
-(define rab (tup [a = 0][b = #t]))
+(define rab (tup [a = 0] [b = #t]))
 (check-type ((λ ([x : (× [a : Int])]) x) rab)
-            : (× [a : Int]) ⇒ (tup [a = 0][b = #t]))
+            : (× [a : Int]) ⇒ (tup [a = 0] [b = #t]))
 
 (check-type (proj ((λ ([x : (× [a : Int])]) x) rab) a)
             : Int ⇒ 0)
 
 (check-type (Λ ([X <: Top]) (λ ([x : X]) x)) : (∀ ([X <: Top]) (→ X X)))
-(check-type (inst (Λ ([X <: Top]) (λ ([x : X]) x)) (× [a : Int][b : Bool]))
-            : (→ (× [a : Int][b : Bool]) (× [a : Int][b : Bool])))
+(check-type (inst (Λ ([X <: Top]) (λ ([x : X]) x)) (× [a : Int] [b : Bool]))
+            : (→ (× [a : Int] [b : Bool]) (× [a : Int] [b : Bool])))
 
 (check-type (proj ((inst (Λ ([X <: Top]) (λ ([x : X]) x))
-                         (× [a : Int][b : Bool]))
+                         (× [a : Int] [b : Bool]))
                    rab) b)
             : Bool ⇒ #t)
 
 (define f2 (λ ([x : (× [a : Nat])]) (tup [orig = x] [asucc = (+ 1 (proj x a))])))
 (check-type f2 : (→ (× [a : Nat]) (× [orig : (× [a : Nat])] [asucc : Nat])))
-(check-type (f2 ra) : (× [orig : (× [a : Nat])][asucc : Nat]))
-(check-type (f2 rab) : (× [orig : (× [a : Nat])][asucc : Nat]))
+(check-type (f2 ra) : (× [orig : (× [a : Nat])] [asucc : Nat]))
+(check-type (f2 rab) : (× [orig : (× [a : Nat])] [asucc : Nat]))
 
 ; check expose properly called for primops
 (define fNat (Λ ([X <: Nat]) (λ ([x : X]) (+ x 1))))
@@ -37,35 +37,35 @@
 (define f2poly
   (Λ ([X <: (× [a : Nat])])
      (λ ([x : X])
-       (tup [orig = x][asucc = (+ (proj x a) 1)]))))
+       (tup [orig = x] [asucc = (+ (proj x a) 1)]))))
 
-(check-type f2poly : (∀ ([X <: (× [a : Nat])]) (→ X (× [orig : X][asucc : Nat]))))
+(check-type f2poly : (∀ ([X <: (× [a : Nat])]) (→ X (× [orig : X] [asucc : Nat]))))
 
 ; inst f2poly with (× [a : Nat])
 (check-type (inst f2poly (× [a : Nat]))
             : (→ (× [a : Nat])
-                 (× [orig : (× [a : Nat])][asucc : Nat])))
+                 (× [orig : (× [a : Nat])] [asucc : Nat])))
 (check-type ((inst f2poly (× [a : Nat])) ra)
-            : (× [orig : (× [a : Nat])][asucc : Nat])
-            ⇒ (tup [orig = ra][asucc = 1]))
+            : (× [orig : (× [a : Nat])] [asucc : Nat])
+            ⇒ (tup [orig = ra] [asucc = 1]))
 
 (check-type ((inst f2poly (× [a : Nat])) rab)
-            : (× [orig : (× [a : Nat])][asucc : Nat])
-            ⇒ (tup [orig = rab][asucc = 1]))
+            : (× [orig : (× [a : Nat])] [asucc : Nat])
+            ⇒ (tup [orig = rab] [asucc = 1]))
 
 (typecheck-fail (proj (proj ((inst f2poly (× [a : Nat])) rab) orig) b))
 
-;; inst f2poly with (× [a : Nat][b : Bool])
-(check-type (inst f2poly (× [a : Nat][b : Bool]))
-            : (→ (× [a : Nat][b : Bool])
-                 (× [orig : (× [a : Nat][b : Bool])][asucc : Nat])))
-(typecheck-fail ((inst f2poly (× [a : Nat][b : Bool])) ra))
+;; inst f2poly with (× [a : Nat] [b : Bool])
+(check-type (inst f2poly (× [a : Nat] [b : Bool]))
+            : (→ (× [a : Nat] [b : Bool])
+                 (× [orig : (× [a : Nat] [b : Bool])] [asucc : Nat])))
+(typecheck-fail ((inst f2poly (× [a : Nat] [b : Bool])) ra))
 
-(check-type ((inst f2poly (× [a : Nat][b : Bool])) rab)
-            : (× [orig : (× [a : Nat][b : Bool])][asucc : Nat])
-            ⇒ (tup [orig = rab][asucc = 1]))
+(check-type ((inst f2poly (× [a : Nat] [b : Bool])) rab)
+            : (× [orig : (× [a : Nat] [b : Bool])] [asucc : Nat])
+            ⇒ (tup [orig = rab] [asucc = 1]))
 
-(check-type (proj (proj ((inst f2poly (× [a : Nat][b : Bool])) rab) orig) b)
+(check-type (proj (proj ((inst f2poly (× [a : Nat] [b : Bool])) rab) orig) b)
             : Bool ⇒ #t)
 
 ;; make sure inst still checks args

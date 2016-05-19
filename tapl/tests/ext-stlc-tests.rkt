@@ -1,4 +1,4 @@
-#lang s-exp "../ext-stlc.rkt"
+#lang sweet-exp "../ext-stlc.rkt"
 (require "rackunit-typechecking.rkt")
 
 ;; tests for stlc extensions

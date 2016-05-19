@@ -1,4 +1,4 @@
-#lang s-exp "../sysf.rkt"
+#lang sweet-exp "../sysf.rkt"
 (require "rackunit-typechecking.rkt")
 
 (check-type (Λ (X) (λ ([x : X]) x)) : (∀ (X) (→ X X)))

@@ -1,4 +1,4 @@
-#lang s-exp "../stlc+reco+var.rkt"
+#lang sweet-exp "../stlc+reco+var.rkt"
 (require "rackunit-typechecking.rkt")
 
 ;; define-type-alias

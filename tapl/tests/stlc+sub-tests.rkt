@@ -1,4 +1,4 @@
-#lang s-exp "../stlc+sub.rkt"
+#lang sweet-exp "../stlc+sub.rkt"
 (require "rackunit-typechecking.rkt")
 
 ;; subtyping tests

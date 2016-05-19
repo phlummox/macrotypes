@@ -1,4 +1,4 @@
-#lang s-exp "../stlc+tup.rkt"
+#lang sweet-exp "../stlc+tup.rkt"
 (require "rackunit-typechecking.rkt")
 
 ;; tests for tuples
