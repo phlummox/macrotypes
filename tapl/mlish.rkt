@@ -358,6 +358,8 @@
   ;; alternate type sig syntax, after parameter names
   [(_ (f:id x:id ...) (~datum :) ty ... (~or (~datum ->) (~datum →)) ty_out . b)
    #'(define/tc (f [x : ty] ... -> ty_out) . b)]
+  [(_ f:id x:id ... ((~datum :) ty ... (~or (~datum ->) (~datum →)) ty_out) . b)
+   #'(define/tc (f [x : ty] ... -> ty_out) . b)]
   [(_ (f:id [x:id (~datum :) τ] ... (~or (~datum ->) (~datum →)) τ_out) 
       e_body ... e)
    #:with Ys (compute-tyvars #'(τ ... τ_out))
