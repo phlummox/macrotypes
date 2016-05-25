@@ -1,5 +1,6 @@
 2016-05-09
 TODO:
+- change typeclass representation into a nicer tree structure
 - lookup concrete op based on return type
   - may need to use expected type
 - define instance of non-parameterized non-base type, eg (List Int)
