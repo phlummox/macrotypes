@@ -30,7 +30,10 @@
      (syntax/loc stx (check-equal? e+ (add-expected v τ-expected)))]
     [(_ e : τ-expected)
      #:with τ (typeof (expand/df #'(add-expected e τ-expected)))
+     ;; #:when (displayln "check-type:")
+     ;; #:when (displayln "computed type:")
      ;; #:when (pretty-print (syntax->datum #'τ))
+     ;; #:when (displayln "expected type:")
      ;; #:when (pretty-print (syntax->datum ((current-type-eval) #'τ-expected)))
      #:fail-unless
      (typecheck? #'τ ((current-type-eval) #'τ-expected))

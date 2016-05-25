@@ -1,11 +1,18 @@
 2016-05-09
 TODO:
 - lookup concrete op based on return type
+  - may need to use expected type
 - define instance of non-parameterized non-base type, eg (List Int)
 - subclasses/inheritance, eg (define-instance (Eq X) => (Ord X) ...)
+  - Done (initial). 2016-05-25
+  - TODO: 
+    - nested subclasses, e.g., A => B => C
+    - instance that uses genop from subclass
 - define-instance for type constructors, eg (define-instance List ...)
 - support non-fn values in typeclasses
 - write constraints for non-tyvars, eg #:where (List X)
+  - Done. 2016-05-11
+- multiparameter type classes, eg Coerce
 
 2016-04-25:
 

@@ -1,3 +1,49 @@
+2016-05-25
+~parse pattern is slow, try to remove?
+ - generic.mlish slows from 71s to 97s when removing special case in ~TC 
+
+2016-05-25
+Subclassing:
+- define (f x ...) expands to (define f1 (lam (x ...) ...)) and separately
+  computes function type to attach to f1
+  - ie, type computed by lam is ignored
+  - can't expand lam first and then use that type because it may reference other
+    functions
+- this works out so long as:
+  - full function type is specified in define
+  - f1 rename-transformer is defined before (define f (lam ...))
+    - Racket's macro expander handles the rest
+  - consistency between fn body and specified return type cannot be checked
+    in define macro
+    - must be pushed into body as expected-type and checked there
+- does not work if:
+  - lambda macro rewrites the type of the function, e.g., with subclasses
+    - dont do this
+
+2016-05-11
+Subclassing: 
+- in define-instance of subclassed class, do specified functions
+  need to already have subclass constraint?
+  - no, the constraints are added by the define-instance
+  - same as haskell behavior:
+data ABC = A | B | C
+
+class Eq2 a where  
+    (===) :: a -> a -> Bool  
+
+--instance Eq2 ABC where
+--  x === y = True
+
+class (Eq2 a) => Num2 a where  
+  add :: a -> a
+
+abcadd :: ABC -> ABC
+abcadd A = B
+
+-- abcadd does not need Eq2 ABC => constraint
+instance Num2 ABC where
+  add = abcadd
+
 2016-04-13:
 Summary of the extra-info problem.
 Problem: datatypes need to know all constructors and argument types
