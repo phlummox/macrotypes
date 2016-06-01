@@ -52,8 +52,52 @@
         #'(~and expanded
             (~parse (_ (_ (_ gen-op) ty-op) (... ...)) 
                     #'expanded)
-            (~parse ops+tys #'((gen-op ty-op) (... ...))))]))))
-
+            (~parse ops+tys #'((gen-op ty-op) (... ...))))])))
+  (define-syntax ~TC-base
+    (pattern-expander
+     (syntax-parser
+      [(_ . pat)
+       #:with expanded (generate-temporary)
+       #'(~and expanded
+              (~parse ((~TC . pat) . _) (flatten-TC #'expanded)))])))
+  #;(define-syntax ~TC/subs
+    (pattern-expander
+     (syntax-parser
+      [(_ . pat)
+       #:with expanded (generate-temporary)
+       #'(~and expanded
+              (~parse pat (parse-TC #'expanded)))])))
+  #;(define (parse-TC TC #:subs [subs null])
+    (syntax-parse TC
+      [(~=> sub-TC ... rest)
+       (parse-TC #'rest #:subs (stx-append #'(sub-TC ...) subs))]
+      [(~TC . ops+tys)
+       (list subs #'ops+tys)]))
+  (define-syntax ~TCs
+    (pattern-expander
+     (syntax-parser
+      ;; pat should be of shape ([op ty] ...)
+      [(_ pat (~and ooo (~literal ...)))
+       #:with expanded (generate-temporary)
+       ;; (stx-map (compose remove-dups flatten-TC) #'expanded) 
+       ;;  produces [List [List [List op+ty]]]
+       ;; - inner [List op+ty] is from the def of a TC
+       ;; - second List is from the flattened subclass TCs
+       ;; - outer List is bc this pattern matces multiple TCs
+       ;; This pattern expander collapses the inner two Lists
+       #'(~and expanded
+              (~parse (((~TC [op ty] (... ...)) (... ...)) ooo)
+                      (stx-map (compose remove-dups flatten-TC) #'expanded))
+              (~parse (pat ooo) #'(([op ty] (... ...) (... ...)) ooo)))])))
+  (define (flatten-TC TC)
+    (syntax-parse TC
+      [(~=> sub-TC ... base-TC)
+       (cons #'base-TC (stx-appendmap flatten-TC #'(sub-TC ...)))]))
+  (define (remove-dups TCs)
+    (syntax-parse TCs
+      [() #'()]
+      [(TC . rst)
+       (cons #'TC (stx-filter (lambda (s) (not (typecheck? s #'TC))) (remove-dups #'rst)))])))
 ;; type inference constraint solving
 (begin-for-syntax 
   ;; matching possibly polymorphic types
@@ -778,16 +822,20 @@
                   ;; ops defined by TC to be bound
                   ([a (syntax-parser [(_)
                     (syntax-parse (expand/df #'(void TC ...)) ; must expand in ctx of Xs
-                      [(_ _ 
-                        (~and TC+ 
+                      [(_ _ .
+                        (~and (TC+ (... ...))
                           ;; sub-op-sym ... will be empty if no subclasses
-                          (~=> (~=> _ (... ...) (~TC [sub-op-sym ty-sub-op] (... ...))) (... ...)
-                               (~TC [op-sym-base ty-op-base] (... ...))))
-                        (... ...))
-                       #:with ((op-sym (... ...)) (... ...))
-                              #'((sub-op-sym (... ...) (... ...) op-sym-base (... ...)) (... ...))
-                       #:with ((ty-op (... ...)) (... ...))
-                              #'((ty-sub-op (... ...) (... ...) ty-op-base (... ...)) (... ...))
+                          ;; (~=> (~=> _ (... ...) (~TC [sub-op-sym ty-sub-op] (... ...))) (... ...)
+                          ;;      (~TC [op-sym-base ty-op-base] (... ...))))
+                          ;; (~TC/subs ((~TC/subs _ ([sub-op-sym ty-sub-op] (... ...))) (... ...))
+                          ;;           ([op-sym-base ty-op-base] (... ...))))
+                          (~TCs ([op-sym ty-op] (... ...)) (... ...))))
+;                        (... ...))
+                       ;; #:with ((op-sym (... ...)) (... ...))
+                       ;;        #'((sub-op-sym (... ...) (... ...) op-sym-base (... ...)) (... ...))
+                       ;;        #:when (print-stx #'((op-sym (... ...)) (... ...)))
+                       ;; #:with ((ty-op (... ...)) (... ...))
+                       ;;        #'((ty-sub-op (... ...) (... ...) ty-op-base (... ...)) (... ...))
                        ;; here, * suffix = flattened list
                        ;; op* ... = op-sym ... with proper ctx, and then flattened
                        #:with (op* (... ...))
@@ -866,8 +914,7 @@
     [(stx-null? #'Xs)
      (define/with-syntax tyX_args
        (syntax-parse #'ty_fnX
-         [(~ext-stlc:→ . tyX_args) #'tyX_args]
-         #;[(~=> _ ... (~ext-stlc:→ . tyX_args))  #'tyX_args]))
+         [(~ext-stlc:→ . tyX_args) #'tyX_args]))
      (syntax-parse #'(e_args tyX_args)
        [((e_arg ...) (τ_inX ... _))
         #:fail-unless (stx-length=? #'(e_arg ...) #'(τ_inX ...))
@@ -930,11 +977,14 @@
          [((TC ...) (τ_in ... τ_out)) ; concrete types
 ;          #:with ((~TC [generic-op ty-concrete-op] ...) ...) #'(TC ...)
           #:with ;; typeclasses, subclasses may be empty
-                 ((~=> (~=> _ ... (~TC [sub-gen-op ty-sub-op] ...)) ... 
-                       (~TC [gen-op ty-op] ...)) ...)
+                 ;; ((~=> (~=> _ ... (~TC [sub-gen-op ty-sub-op] ...)) ... 
+                 ;;       (~TC [gen-op ty-op] ...)) ...)
+                 ;; ((~TC/subs ((~TC/subs _ ([sub-gen-op ty-sub-op] ...)) ...)
+                 ;;            ([gen-op ty-op] ...)) ...)
+                 (~TCs ([generic-op ty-concrete-op] ...) ...)
                  #'(TC ...)
-          #:with ((generic-op ...) ...) #'((sub-gen-op ... ... gen-op ...) ...)
-          #:with ((ty-concrete-op ...) ...) #'((ty-sub-op ... ... ty-op ...) ...)
+          ;; #:with ((generic-op ...) ...) #'((sub-gen-op ... ... gen-op ...) ...)
+          ;; #:with ((ty-concrete-op ...) ...) #'((ty-sub-op ... ... ty-op ...) ...)
 ;;          #:with ((_ (_ (_ generic-op) ty-concrete-op) ...) ...) #'(TC ...)
           #:with (op ...)
                  (stx-appendmap
@@ -1493,7 +1543,8 @@
       (get-type-tags #'(ty_in ...))]))
  (define (TC-exists? TC #:ctx [ctx TC]) ; throws exn if fail
    (syntax-parse TC
-     [(~=> _ ... (~TC [gen-op ty-op] . _)) ; only need 1st op
+;     [(~TC/subs _ ([gen-op ty-op] . _)) ; only need 1st op
+     [(~TC-base [gen-op ty-op] . _) ; only need 1st op
       (with-handlers 
         ([exn:fail:syntax:unbound? 
            (lambda (e) 
@@ -1544,7 +1595,8 @@
     [(_ (Name ty ...) [generic-op concrete-op] ...)
      #:with (~=> TC ... 
               (~TC [generic-op-expected ty-concrete-op-expected] ...))
-            (expand/df #'(Name ty ...))
+     ;; #:with (~TC/subs (TC ...) ([generic-op-expected ty-concrete-op-expected] ...))
+             (expand/df #'(Name ty ...))
      #:when (TCs-exist? #'(TC ...) #:ctx stx)
      #:fail-unless (set=? (syntax->datum #'(generic-op ...)) 
                           (syntax->datum #'(generic-op-expected ...)))
@@ -1591,7 +1643,8 @@
     ;; TODO: subclasses ignored right now (see _ ...)
     [(_ TC ... (~datum =>) (Name ty ...) [generic-op concrete-op] ...)
      #:with (X ...) (compute-tyvars #'(ty ...))
-     #:with (Xs+ (TC+ ... (~=> _ ... (~TC [generic-op-expected ty-concrete-op-expected] ...))) _)
+;     #:with (Xs+ (TC+ ... (~=> _ ... (~TC [generic-op-expected ty-concrete-op-expected] ...))) _)
+     #:with (Xs+ (TC+ ... (~TC-base [generic-op-expected ty-concrete-op-expected] ...)) _)
             (infers/tyctx+erase #'([X : #%type] ...) #'(TC ... (Name ty ...)))
      ;; simulate as if the declared concrete-op* has TC ... predicates
      ;; TODO: fix this manual deconstruction and assembly

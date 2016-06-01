@@ -15,6 +15,9 @@
 (define (stx-flatten stxs)
   (apply append (stx-map stx->list stxs)))
 
+(define (stx-filter p? stxs)
+  (filter p? (stx->list stxs)))
+
 (define (curly-parens? stx)
   (define paren-prop (syntax-property stx 'paren-shape))
   (and paren-prop (char=? #\{ paren-prop)))
