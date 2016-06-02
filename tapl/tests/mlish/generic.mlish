@@ -101,9 +101,9 @@
               (and (== x x) (lte x x)))
   : (=>/test (Ord Y) (Eq Y) (→ Y Bool)))
 
-;; ;; todo: not working; results in dup ids
-;; #;(check-type (λ ([x : X] [y : Y] #:where (Ord X) (Ord Y)) (< x y))
-;;   : (=>/test (Ord Y) (→ Y Y Bool)))
+;; todo: not working; results in dup ids
+#;(check-type (λ ([x : X] [y : Y] #:where (Ord X) (Ord Y)) (< x y))
+  : (=>/test (Ord Y) (→ Y Y Bool)))
 
 (define (f [x : X] #:where (Eq X) -> Bool)
   (== x x))
@@ -194,7 +194,6 @@
  #:with-msg 
  "Ord Bool.*instance undefined.*Cannot instantiate function with constraints.*Ord X.*with.*X : Bool")
 
-
 ;; type classes for non-base types
 (define-instance (Eq X) => (Eq (List X))
  [== (λ ([l1 : (List X)] [l2 : (List X)])
@@ -244,7 +243,7 @@
 (define (id-fn2 [xs : (List X)] #:where (Eq X) -> (List X)) xs)
 (typecheck-fail (id-fn2 (list #f)) #:with-msg "\\(Eq Bool\\) instance undefined")
 (check-type (id-fn2 (list 1)) : (List Int) -> (list 1))
-
+ 
 ;; TODO: #:where TC, where TC has a tycon, like #:where (List X)
 ;; still doesnt work I dont think
 #;(define (list-eq2 [l1 : (List X)] [l2 : (List X)] #:where (List X) -> Bool)
@@ -259,8 +258,7 @@
 (check-type (memsq? 2 (list 3 4)) : Bool -> #t)
 (typecheck-fail (memsq? (list 1) (list (list 1)))
   #:with-msg "\\(Num \\(List Int\\)\\) instance undefined")
-(typecheck-fail (memsq? #f (list #f))
-  #:with-msg "\\(Eq Bool\\) instance undefined")
+
 
 (define (andmap [p? : (→ X Bool)] [lst : (List X)] -> Bool)
   (match lst with
@@ -389,19 +387,75 @@
   [fun3 +])
 (define-instance (Bottom Int)
   [fun4 +])
-(define (diamond-fun4 [x : X] #:where (Bottom X) -> X)
-  (fun4 x x))
-(check-type (diamond-fun4 5) : Int -> 10)
-(define (diamond-fun3 [x : X] #:where (Bottom X) -> X)
-  (fun3 x x))
-(check-type (diamond-fun3 5) : Int -> 10)
-(define (diamond-fun2 [x : X] #:where (Bottom X) -> X)
+(define (left-fun2 [x : X] #:where (Left X) -> X)
   (fun2 x x))
-(check-type (diamond-fun2 5) : Int -> 10)
-(define (diamond-fun-Int [x : Int] -> Int)
+(check-type (left-fun2 6) : Int -> 12)
+(define (left-fun1 [x : X] #:where (Left X) -> X)
   (fun1 x x))
-(check-type (diamond-fun-Int 5) : Int -> 10)
+(check-type (left-fun1 6) : Int -> 12)
+(define (bott-fun4 [x : X] #:where (Bottom X) -> X)
+  (fun4 x x))
+(check-type (bott-fun4 5) : Int -> 10)
+(define (bott-fun3 [x : X] #:where (Bottom X) -> X)
+  (fun3 x x))
+(check-type (bott-fun3 5) : Int -> 10)
+(define (bott-fun2 [x : X] #:where (Bottom X) -> X)
+  (fun2 x x))
+(check-type (bott-fun2 5) : Int -> 10)
+(define (bott-fun-Int [x : Int] -> Int)
+  (fun1 x x))
+(check-type (bott-fun-Int 5) : Int -> 10)
 ;; lookup more than one parent level
-(define (diamond-fun1 [x : X] #:where (Bottom X) -> X)
+(define (bott-fun1 [x : X] #:where (Bottom X) -> X)
   (fun1 x x))
-(check-type (diamond-fun1 5) : Int -> 10)
+(check-type (bott-fun1 5) : Int -> 10)
+
+;; non-base typeclass instances with subclassing
+(define-instance (Top X) => (Top (List X))
+ [fun1 (λ ([l1 : (List X)] [l2 : (List X)])
+         (match2 (tup l1 l2) with
+          [(nil,nil) -> l2]
+          [((x :: xs),(y :: ys)) -> (cons (fun1 x y) (fun1 xs ys))]
+          [_ -> l1]))])
+(define (top-list-fun1 [xs : (List X)] #:where (Top X) -> (List X))
+  (fun1 xs xs))
+(check-type (top-list-fun1 (list 5)) : (List Int) -> (list 10))
+(check-type (top-list-fun1 (list 5 6)) : (List Int) -> (list 10 12))
+
+(define-instance (Left X) => (Left (List X))
+ [fun2 (λ ([l1 : (List X)] [l2 : (List X)])
+         (match2 (tup l1 l2) with
+          [(nil,nil) -> l2]
+          [((x1 :: xs1),(y1 :: ys1)) -> (cons (fun2 x1 y1) (fun2 xs1 ys1))]
+          [_ -> l1]))])
+
+(define (left-list-fun2 [zs : (List X)] #:where (Left X) -> (List X))
+  (fun2 zs zs))
+(check-type (left-list-fun2 (list 6)) : (List Int) -> (list 12))
+(define (left-list-fun1 [xx : (List X)] #:where (Left X) -> (List X))
+   (fun1 xx xx))
+(check-type (left-list-fun1 (list 6)) : (List Int) -> (list 12))
+
+;; can use fun1 (from Top), for both X and (List X),
+;; in both instance def, and regular fns
+(define-instance (Right X) => (Right (List X))
+ [fun3 (λ ([l1 : (List X)] [l2 : (List X)])
+         (match2 (tup l1 l2) with
+          [(nil,nil) -> l2]
+          [((x1 :: xs1),(y1 :: ys1)) -> (cons (fun1 x1 y1) (fun1 xs1 ys1))]
+          [_ -> l1]))])
+(define (right-list-fun1 [xx : (List X)] #:where (Right X) -> (List X))
+   (fun1 xx xx))
+(check-type (right-list-fun1 (list 6)) : (List Int) -> (list 12))
+
+(define-instance (Bottom X) => (Bottom (List X))
+ [fun4 (λ ([l1 : (List X)] [l2 : (List X)])
+         (match2 (tup l1 l2) with
+          [(nil,nil) -> l2]
+          [((x1 :: xs1),(y1 :: ys1)) -> (cons (fun4 x1 y1) (fun4 xs1 ys1))]
+          [_ -> l1]))])
+
+;; lookup more than one parent level
+(define (bott-list-fun1 [xs : (List X)] #:where (Bottom X) -> (List X))
+  (fun1 xs xs))
+(check-type (bott-list-fun1 (list 5)) : (List Int) -> (list 10))

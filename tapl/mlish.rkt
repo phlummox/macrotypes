@@ -1514,29 +1514,45 @@
  ;; TODO: using just input types, but sometimes may need output type
  ;; eg, Read typeclass, this is currently unsupported
  ;; - need to use expected-type?
+ ;; - gen-op is identifier, eg should already have proper context
  (define (lookup-op gen-op tys)
+  (define (transfer-gen-op-ctx o) (format-id gen-op "~a" o))
+  (define (transfer-gen-op-ctxs os) (stx-map transfer-gen-op-ctx os))
+  ;; (printf "lookup op ~a\n" (syntax->datum gen-op))
+  ;; (print-stxs tys)
+  ;; (and (identifier? gen-op) (pretty-print (identifier-binding gen-op)))
   (syntax-parse tys
    ;; TODO: for now, only handle uniform tys, ie tys must be all
    ;;  tycons or all base types or all tyvars
    ;; TODO: combine clauses to remove dup code?
    ;; tycon --------------------------------------------------
    ;; - recur on ty-args
+   ;; - 2016-06-01 - don't recur, just insert fn for tycon, and let #%app
+   ;;   insert other implicit args
+   ;; - 2016-06-01 - this won't work for doubly nested vals, eg lst-of-lsts
    [(((~literal #%plain-app) tycon
      ((~literal #%plain-lambda) bvs ei ty-arg ...)) ...)
     #:with mangled (mangle gen-op #'(tycon ...))
     ;; dont have to expand to concop here, but gives better errmsg
     #:with [conc-op ty-conc-op] (infer+erase #'mangled)
-    ;; drop the TCs, because the proper subops are already applied
-    ;; TODO: is this implemented correctly?
-    #:with (~∀ Xs (~=> _ ... (~ext-stlc:→ . ty-args))) #'ty-conc-op
+    #:with (~∀ Xs (~=> TC ... (~ext-stlc:→ . ty-args))) #'ty-conc-op
+    ;; get sub-ops needed from TCs (gen-op will be one of these)
+    #:with (~TCs ([op _] ...) ...) #'(TC ...) ; order matters here, must match order of arg types
+    #:with ((sub-op ...) ...) (stx-map transfer-gen-op-ctxs #'((op ...) ...))
+    ;; ;; drop the TCs, because the proper subops are already applied
+    ;; ;; TODO: is this implemented correctly?
+    ;; #:with (~∀ Xs (~=> _ ... (~ext-stlc:→ . ty-args))) #'ty-conc-op
     #:with ty-conc-op-noTC #'(∀ Xs (ext-stlc:→ . ty-args))
+;    (expand/df (mangle gen-op #'(tycon ...)))
     (⊢ (conc-op 
-         #,@(apply stx-map (lambda tys (lookup-op gen-op tys)) (syntax->list #'((ty-arg ...) ...))))
+         #,@(apply stx-appendmap (lambda (ops . tys) (stx-map (lambda (o) (lookup-op o tys)) ops))
+                   #'((sub-op ...) ...)
+                   (syntax->list #'((ty-arg ...) ...))))
        : ty-conc-op-noTC)]
    ;; base type --------------------------------------------------
    [(((~literal #%plain-app) tag) ...) (expand/df (mangle gen-op #'(tag ...)))]
    ;; tyvars --------------------------------------------------
-   [_ (expand/df (mangle gen-op tys))]))
+   [_ (let ([x (expand/df (mangle gen-op tys))]) #;(print-stx x) x)]))
  (define (get-fn-ty-in-tags ty-fn)
    (syntax-parse ty-fn
      [(~∀ _ (~ext-stlc:→ ty_in ... _))
@@ -1581,7 +1597,7 @@
                               (lookup-op #'o #'(ty_e (... ...))))
               #:with app (datum->syntax #'o '#%app)
               ;; for now, #%app will expand (already expanded) (conc-op e- ...) again
-              #'(app out-op e- (... ...))])) ...
+              (datum->syntax stx (cons #'app (cons #'out-op #'(e- (... ...)))))])) ...
          (define-syntax (Name stx)
            (syntax-parse stx
              [(_ X ...) 
@@ -1593,10 +1609,9 @@
   (syntax-parse stx
     ;; base type, possibly with subclasses  --------------------------------------------------
     [(_ (Name ty ...) [generic-op concrete-op] ...)
-     #:with (~=> TC ... 
-              (~TC [generic-op-expected ty-concrete-op-expected] ...))
+     #:with (~=> TC ... (~TC [generic-op-expected ty-concrete-op-expected] ...))
      ;; #:with (~TC/subs (TC ...) ([generic-op-expected ty-concrete-op-expected] ...))
-             (expand/df #'(Name ty ...))
+            (expand/df #'(Name ty ...))
      #:when (TCs-exist? #'(TC ...) #:ctx stx)
      #:fail-unless (set=? (syntax->datum #'(generic-op ...)) 
                           (syntax->datum #'(generic-op-expected ...)))
@@ -1644,8 +1659,14 @@
     [(_ TC ... (~datum =>) (Name ty ...) [generic-op concrete-op] ...)
      #:with (X ...) (compute-tyvars #'(ty ...))
 ;     #:with (Xs+ (TC+ ... (~=> _ ... (~TC [generic-op-expected ty-concrete-op-expected] ...))) _)
-     #:with (Xs+ (TC+ ... (~TC-base [generic-op-expected ty-concrete-op-expected] ...)) _)
+     ;; #:with (Xs+ (TC+ ... (~TC-base [generic-op-expected ty-concrete-op-expected] ...)) _)
+     #:with (Xs+ 
+             (TC+ ... 
+              (~=> TCsub ... 
+                   (~TC [generic-op-expected ty-concrete-op-expected] ...)))
+             _)
             (infers/tyctx+erase #'([X : #%type] ...) #'(TC ... (Name ty ...)))
+     #:when (TCs-exist? #'(TCsub ...) #:ctx stx)
      ;; simulate as if the declared concrete-op* has TC ... predicates
      ;; TODO: fix this manual deconstruction and assembly
      #:with ((app fa (lam _ ei ty_fn)) ...) #'(ty-concrete-op-expected ...)
