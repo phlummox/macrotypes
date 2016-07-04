@@ -88,18 +88,33 @@
                #:when (stx-contains-id? ty X))
       X))
 
-  ;; constrainable-X? : Id Solved-Constraints (Stx-Listof Id) -> Boolean
-  (define (constrainable-X? X cs Vs)
-    (for/or ([c (in-list (stx->list cs))])
-      (or (free-identifier=? X (stx-car c))
-          (and (member (stx-car c) Vs free-identifier=?)
-               (stx-contains-id? (stx-cadr c) X)
-               ))))
-
   ;; find-constrainable-vars : (Stx-Listof Id) Solved-Constraints (Stx-Listof Id) -> (Listof Id)
   (define (find-constrainable-vars Xs cs Vs)
-    (for/list ([X (in-list Xs)] #:when (constrainable-X? X cs Vs))
-      X))
+    (syntax-parse cs
+      [() Vs]
+      [([a b] . rst)
+       (cond
+         [(member #'a Vs free-identifier=?)
+          (find-constrainable-vars
+           Xs
+           #'rst
+           (append (find-free-Xs Xs #'b) Vs))]
+         ;; TODO: Generalize this for not-in-Xs identifiers deeper within #'b
+         [(and (identifier? #'b) (not (member #'b Xs free-identifier=?)))
+          (find-constrainable-vars
+           Xs
+           #'rst
+           (cons #'a (cons #'b Vs)))]
+         [else
+          (define Vs*
+            (find-constrainable-vars
+             Xs
+             #'rst
+             Vs))
+          (cond [(member #'a Vs* free-identifier=?)
+                 (append (find-free-Xs Xs #'b) Vs*)]
+                [else
+                 (cons #'a Vs*)])])]))
 
   ;; set-minus/Xs : (Listof Id) (Listof Id) -> (Listof Id)
   (define (set-minus/Xs Xs Ys)

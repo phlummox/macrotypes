@@ -1,4 +1,4 @@
-#lang s-exp "../infer+sugar.rkt"
+#lang s-exp "../infer+tup.rkt"
 (require "rackunit-typechecking.rkt")
 
 (check-type (λ (x) 5) : (∀ (X) (→ X Int)))
@@ -92,6 +92,24 @@
 (check-type (fact 6) : Int -> 720)
 (check-type (fact 7) : Int -> 5040)
 (check-type (fact 8) : Int -> 40320)
+
+;; match tests
+
+(check-type (match 1 with [(v: x) -> x]) : Int -> 1)
+
+(check-type (λ (x) (match x with [(v: y) -> (+ y 1)])) : (→ Int Int))
+
+(check-type (match (tup 1 "a") with [(v: x) -> x])
+            : (× Int String) -> (tup 1 "a"))
+(check-type (match (tup 1 "a") with [(tup: (v: x) (v: y)) -> x])
+            : Int -> 1)
+(check-type (match (tup 1 "a") with [(tup: (v: x) (v: y)) -> y])
+            : String -> "a")
+
+(check-type (λ (x) (match x with [(tup: (v: y) (v: z)) -> y]))
+            : (∀ (Y Z) (→ (× Y Z) Y)))
+(check-type (λ (x) (match x with [(tup: (v: y) (v: z)) -> z]))
+            : (∀ (Z Y) (→ (× Y Z) Z)))
 
 ;; from the old infer tests
 
