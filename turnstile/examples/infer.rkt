@@ -66,6 +66,30 @@
    --------
    [⊢ [[_ ≫ (if- e_c- e_t- e_e-)] ⇒ : τ_out]]])
 
+(define-typed-syntax or
+  [(or e ...) ≫
+   [⊢ [[e ≫ e-] ⇒ : τ_e*] ...]
+   [#:with [(~?Some [V1 ...] (~?∀* (V2 ...) τ_e) (~Cs [τ_1 τ_2] ...)) ...]
+    (syntax-local-introduce #'[τ_e* ...])]
+   [#:with Bool* ((current-type-eval) #'Bool)]
+   [#:with τ_out (some/inst/generalize #'[V1 ... ... V2 ... ...]
+                                       #'Bool
+                                       #'([τ_e Bool*] ... [τ_1 τ_2] ... ...))]
+   --------
+   [⊢ [[_ ≫ (or- e- ...)] ⇒ : τ_out]]])
+
+(define-typed-syntax and
+  [(and e ...) ≫
+   [⊢ [[e ≫ e-] ⇒ : τ_e*] ...]
+   [#:with [(~?Some [V1 ...] (~?∀* (V2 ...) τ_e) (~Cs [τ_1 τ_2] ...)) ...]
+    (syntax-local-introduce #'[τ_e* ...])]
+   [#:with Bool* ((current-type-eval) #'Bool)]
+   [#:with τ_out (some/inst/generalize #'[V1 ... ... V2 ... ...]
+                                       #'Bool
+                                       #'([τ_e Bool*] ... [τ_1 τ_2] ... ...))]
+   --------
+   [⊢ [[_ ≫ (and- e- ...)] ⇒ : τ_out]]])
+
 
 (define-typed-syntax ann #:datum-literals (:)
   [(ann e:expr : τ:type) ≫
@@ -119,6 +143,8 @@
 (define-primop cons : (∀ (X) (→ X (List X) (List X))))
 (define-primop first : (∀ (X) (→ (List X) X)))
 (define-primop rest : (∀ (X) (→ (List X) (List X))))
+
+(define-primop abs : (→ Int Int))
 
 
 

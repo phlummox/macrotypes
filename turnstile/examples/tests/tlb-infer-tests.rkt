@@ -243,30 +243,25 @@
       lst2
       (cons (first lst1) (append (rest lst1) lst2))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; TODO: add support for tuples, and everything else important in this commented-out code
-
-#|
 ; nqueens
 (define-type-alias Queen (× Int Int))
-(define (q-x [q : Queen] → Int) (proj q 0))
-(define (q-y [q : Queen] → Int) (proj q 1))
-(define (Q [x : Int] [y : Int] → Queen) (tup x y))
+(define/rec (q-x [q : Queen]) -> Int (match q with [(tup: (v: x) (v: y)) -> x]))
+(define/rec (q-y [q : Queen]) -> Int (match q with [(tup: (v: x) (v: y)) -> y]))
+(define/rec (Q [x : Int] [y : Int]) -> Queen (tup x y))
 
-(define (safe? [q1 : Queen] [q2 : Queen] → Bool)
+(define/rec (safe? [q1 : Queen] [q2 : Queen]) -> Bool
   (let ([x1 (q-x q1)][y1 (q-y q1)]
         [x2 (q-x q2)][y2 (q-y q2)])
     (not (or (= x1 x2) (= y1 y2) (= (abs (- x1 x2)) (abs (- y1 y2)))))))
-(define (safe/list? [qs : (List Queen)] → Bool)
-  (if (nil? qs)
+(define/rec (safe/list? [qs : (List Queen)]) -> Bool
+  (if (empty? qs)
       #t
-      (let ([q1 (hd qs)])
-        (all? (λ ([q2 : Queen]) (safe? q1 q2)) (tl qs)))))
-(define (valid? [lst : (List Queen)] → Bool)
+      (let ([q1 (first qs)])
+        (all? (λ (q2) (safe? q1 q2)) (rest qs)))))
+(define/rec (valid? [lst : (List Queen)]) -> Bool
   (all? safe/list? (tails lst)))
 
-(define (nqueens [n : Int] → (List Queen))
+(define/rec (nqueens [n : Int]) -> (List Queen)
   (let* ([process-row
           (λ ;([r : Int] [all-possible-so-far : (List (List Queen))])
               (r all-possible-so-far)
@@ -280,20 +275,20 @@
                  (λ (c) (cons (Q r c) qs))
                  (build-list n add1))
                 new-qss))
-             nil
+             empty
              all-possible-so-far))]
-         [all-possible (foldl process-row (list nil) (build-list n add1))])
+         [all-possible (foldl process-row (list empty) (build-list n add1))])
     (let ([solns (filter valid? all-possible)])
-      (if (nil? solns)
-          nil
-          (hd solns)))))
+      (if (empty? solns)
+          empty
+          (first solns)))))
 
 (check-type nqueens : (→ Int (List Queen)))
-(check-type (nqueens 1) : (List Queen) ⇒ (list (list 1 1)))
-(check-type (nqueens 2) : (List Queen) ⇒ (nil {Queen}))
-(check-type (nqueens 3) : (List Queen) ⇒ (nil {Queen}))
-(check-type (nqueens 4) : (List Queen) ⇒ (list (Q 3 1) (Q 2 4) (Q 1 2) (Q 4 3)))
-(check-type (nqueens 5) : (List Queen) ⇒ (list (Q 4 2) (Q 3 4) (Q 2 1) (Q 1 3) (Q 5 5)))
+(check-type (nqueens 1) : (List Queen) -> (list (list 1 1)))
+(check-type (nqueens 2) : (List Queen) -> (list))
+(check-type (nqueens 3) : (List Queen) -> (list))
+(check-type (nqueens 4) : (List Queen) -> (list (Q 3 1) (Q 2 4) (Q 1 2) (Q 4 3)))
+(check-type (nqueens 5) : (List Queen) -> (list (Q 4 2) (Q 3 4) (Q 2 1) (Q 1 3) (Q 5 5)))
 
 ; --------------------------------------------------
 ; all ext-stlc tests should still pass (copied below):
@@ -302,23 +297,28 @@
 (check-type "one" : String) ; literal now supported
 (check-type #f : Bool) ; literal now supported
 
-(check-type (λ ([x : Bool]) x) : (→ Bool Bool)) ; Bool is now valid type
+(check-type (ann (λ (x) x) : (→ Bool Bool)) : (→ Bool Bool)) ; Bool is now valid type
 
 ;; Unit
 (check-type (void) : Unit)
 (check-type void : (→ Unit))
 
 (typecheck-fail
- ((λ ([x : Unit]) x) 2)
+ ((ann (λ (x) x) : (→ Unit Unit)) 2)
  #:with-msg
- "expected: Unit\n *given: Int")
+ "couldn't unify Unit and Int")
 (typecheck-fail
- ((λ ([x : Unit]) x) void)
+ ((ann (λ (x) x) : (→ Unit Unit)) void)
   #:with-msg
-  "expected: Unit\n *given: \\(→ Unit\\)")
+  "couldn't unify Unit and \\(→ Unit\\)")
 
-(check-type ((λ ([x : Unit]) x) (void)) : Unit)
+(check-type ((ann (λ (x) x) : (→ Unit Unit)) (void)) : Unit)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; TODO: implement begin, letrec, and everything else needed for these
+
+#|
 ;; begin
 (check-type (begin 1) : Int)
 
