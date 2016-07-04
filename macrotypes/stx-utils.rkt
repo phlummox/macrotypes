@@ -95,6 +95,22 @@
          (stx-contains-id? #'b x))]
     [_ #false]))
 
+;; sort-ids/stx : (Listof Id) Stx -> (Listof Id)
+(define (sort-ids/stx ids stx)
+  (reverse (rev-sort-ids/stx ids stx (list))))
+
+;; rev-sort-ids/stx : (Listof Id) Stx (Listof Id) -> (Listof Id)
+(define (rev-sort-ids/stx ids stx acc)
+  (syntax-parse stx
+    [x:id
+     (cond [(member #'x acc free-identifier=?) acc]
+           [(member #'x ids free-identifier=?)
+            => (λ (mem) (cons (car mem) acc))]
+           [else acc])]
+    [(a . b)
+     (rev-sort-ids/stx ids #'b (rev-sort-ids/stx ids #'a acc))]
+    [_ acc]))
+
 ;; based on make-variable-like-transformer from syntax/transformer,
 ;; but using (#%app id ...) instead of ((#%expression id) ...)
 (define (make-variable-like-transformer ref-stx)

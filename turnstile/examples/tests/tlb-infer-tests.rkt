@@ -39,7 +39,7 @@
 (check-type (λ (f a) (f a)) : (∀ (A B) (→ (→ A B) A B)))
 
 (check-type (λ (a f g) (g (f a)))
-            : (∀ (A C B) (→ A (→ A B) (→ B C) C)))
+            : (∀ (A B C) (→ A (→ A B) (→ B C) C)))
 (check-type (λ (a f g) (g (f a) (+ (f 1) (f 2))))
             : (∀ (C) (→ Int (→ Int Int) (→ Int Int C) C)))
 (check-type (λ (a f g) (g (λ () (f a)) (+ (f 1) (f 2))))
@@ -109,7 +109,7 @@
 (check-type (λ (x) (match x with [(tup: (v: y) (v: z)) -> y]))
             : (∀ (Y Z) (→ (× Y Z) Y)))
 (check-type (λ (x) (match x with [(tup: (v: y) (v: z)) -> z]))
-            : (∀ (Z Y) (→ (× Y Z) Z)))
+            : (∀ (Y Z) (→ (× Y Z) Z)))
 
 ;; from the old infer tests
 

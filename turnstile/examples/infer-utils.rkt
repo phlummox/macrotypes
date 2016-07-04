@@ -88,6 +88,10 @@
                #:when (stx-contains-id? ty X))
       X))
 
+  ;; find-free-Xs/type-order : (Stx-Listof Id) Type -> (Listof Id)
+  (define (find-free-Xs/type-order Xs ty)
+    (sort-ids/stx (find-free-Xs Xs ty) ty))
+
   ;; find-constrainable-vars : (Stx-Listof Id) Solved-Constraints (Stx-Listof Id) -> (Listof Id)
   (define (find-constrainable-vars Xs cs Vs)
     (syntax-parse cs
@@ -154,7 +158,7 @@
         c))
     (?Some
      (set-minus/Xs constrainable-Xs concrete-constrainable-Xs)
-     (?∀ (find-free-Xs unconstrainable-Xs ty) ty)
+     (?∀ (find-free-Xs/type-order unconstrainable-Xs ty) ty)
      cs3))
 
   (define (datum=? a b)
