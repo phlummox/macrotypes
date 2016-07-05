@@ -124,7 +124,7 @@
 (define {X Y} (foldl [f : (→ X Y Y)] [acc : Y] [lst : (List X)] → Y)
   (if (nil? lst)
       acc
-      (foldr f (f (hd lst) acc) (tl lst))))
+      (foldl f (f (hd lst) acc) (tl lst))))
 
 (define {X} (all? [p? : (→ X Bool)] [lst : (List X)] → Bool)
   (if (nil? lst)
@@ -191,11 +191,11 @@
           (hd solns)))))
 
 (check-type nqueens : (→ Int (List Queen)))
-(check-type (nqueens 1) : (List Queen) ⇒ (list (list 1 1)))
+(check-type (nqueens 1) : (List Queen) ⇒ (list (Q 1 1)))
 (check-type (nqueens 2) : (List Queen) ⇒ (nil {Queen}))
 (check-type (nqueens 3) : (List Queen) ⇒ (nil {Queen}))
-(check-type (nqueens 4) : (List Queen) ⇒ (list (Q 3 1) (Q 2 4) (Q 1 2) (Q 4 3)))
-(check-type (nqueens 5) : (List Queen) ⇒ (list (Q 4 2) (Q 3 4) (Q 2 1) (Q 1 3) (Q 5 5)))
+(check-type (nqueens 4) : (List Queen) ⇒ (list (Q 1 2) (Q 2 4) (Q 3 1) (Q 4 3)))
+(check-type (nqueens 5) : (List Queen) ⇒ (list (Q 1 2) (Q 2 4) (Q 3 1) (Q 4 3) (Q 5 5)))
 
 ; --------------------------------------------------
 ; all ext-stlc tests should still pass (copied below):
