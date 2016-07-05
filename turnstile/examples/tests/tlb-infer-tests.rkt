@@ -314,11 +314,6 @@
 
 (check-type ((ann (λ (x) x) : (→ Unit Unit)) (void)) : Unit)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; TODO: implement begin, letrec, and everything else needed for these
-
-#|
 ;; begin
 (check-type (begin 1) : Int)
 
@@ -329,13 +324,18 @@
  (begin 1 2 3)
  #:with-msg "Expected expression 1 to have Unit type, got: Int")
 
-(check-type (begin (void) 1) : Int ⇒ 1)
-(check-type ((λ ([x : Int]) (begin (void) x)) 1) : Int)
-(check-type ((λ ([x : Int]) (begin x)) 1) : Int)
-(check-type ((λ ([x : Int]) (begin (begin x))) 1) : Int)
-(check-type ((λ ([x : Int]) (begin (void) (begin (void) x))) 1) : Int)
-(check-type ((λ ([x : Int]) (begin (begin (void) x))) 1) : Int)
+(check-type (begin (void) 1) : Int -> 1)
+(check-type ((λ (x) (begin (void) x)) 1) : Int -> 1)
+(check-type ((λ (x) (begin x)) 1) : Int -> 1)
+(check-type ((λ (x) (begin (begin x))) 1) : Int -> 1)
+(check-type ((λ (x) (begin (void) (begin (void) x))) 1) : Int -> 1)
+(check-type ((λ (x) (begin (begin (void) x))) 1) : Int -> 1)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; TODO: implement a new ann, letrec, and everything else needed for these
+
+#|
 ;;ascription
 (check-type (ann 1 : Int) : Int ⇒ 1)
 (check-type ((λ ([x : Int]) (ann x : Int)) 10) : Int ⇒ 10)

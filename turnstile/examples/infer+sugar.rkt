@@ -40,3 +40,9 @@
          (λ (dummy)
            (do bind . rst)))]])
 
+(define-typed-syntax begin
+  [(begin e:expr ... e_body:expr) ≫
+   [#:with [x ...] (generate-temporaries #'[e ...])]
+   --------
+   [_ ≻ (let ([x e] ...) e_body)]])
+

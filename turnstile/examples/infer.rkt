@@ -1,5 +1,5 @@
 #lang turnstile
-(extends "ext-stlc.rkt" #:except #%app λ ann if let let*)
+(extends "ext-stlc.rkt" #:except #%app λ ann if let let* begin)
 (reuse Λ ∀ inst #:from "sysf.rkt")
 (require (only-in "sysf.rkt" ∀ ~∀ ∀? Λ))
 (reuse List #:from "stlc+cons.rkt")
