@@ -97,6 +97,20 @@
    [⊢ [[e ≫ e-] ⇒ : τ_e**]]
    [#:with (~?Some [V1 ...] (~?∀ (V2 ...) τ_e*) (~Cs [τ_1 τ_2] ...))
     (syntax-local-introduce #'τ_e**)]
+   [#:with τ_e (some/inst/generalize #'[X ... V1 ... V2 ...]
+                                     #'τ_ann
+                                     #'([τ_e* τ_ann]
+                                        [τ_1 τ_2]
+                                        ...))]
+   --------
+   [⊢ [[_ ≫ e-] ⇒ : τ_e]]])
+
+(define-typed-syntax ann/exact #:datum-literals (:)
+  [(ann e:expr : τ:type) ≫
+   [#:with (~?∀ (X ...) τ_ann) #'τ.norm]
+   [⊢ [[e ≫ e-] ⇒ : τ_e**]]
+   [#:with (~?Some [V1 ...] (~?∀ (V2 ...) τ_e*) (~Cs [τ_1 τ_2] ...))
+    (syntax-local-introduce #'τ_e**)]
    [#:with τ_e ((current-type-eval)
                 (some/inst/generalize #'[X ... V1 ... V2 ...]
                                       #'τ_ann
@@ -125,18 +139,18 @@
    --------
    [_ ≻ (begin-
           (define-syntax- x (make-rename-transformer (⊢ tmp : τ_x.norm)))
-          (define- tmp (ann e : τ_x.norm)))]]
+          (define- tmp (ann/exact e : τ_x.norm)))]]
   [(define/rec (f x:id ...) : τ_f body:expr) ≫
    --------
    [_ ≻ (define/rec f : τ_f (λ (x ...) body))]]
   [(define/rec (f [x:id : τ_x] ...) -> τ_res body:expr) ≫
    --------
    [_ ≻ (define/rec f : (→ τ_x ... τ_res)
-          (ext-stlc:λ ([x : τ_x] ...) (ann body : τ_res)))]]
+          (ext-stlc:λ ([x : τ_x] ...) (ann/exact body : τ_res)))]]
   [(define/rec #:∀ (X:id ...+) (f [x:id : τ_x] ...) -> τ_res body:expr) ≫
    --------
    [_ ≻ (define/rec f : (∀ (X ...) (→ τ_x ... τ_res))
-          (sysf:Λ (X ...) (ext-stlc:λ ([x : τ_x] ...) (ann body : τ_res))))]])
+          (sysf:Λ (X ...) (ext-stlc:λ ([x : τ_x] ...) (ann/exact body : τ_res))))]])
 
 (define-primop empty? : (∀ (X) (→ (List X) Bool)))
 (define-primop empty : (∀ (X) (List X)))
