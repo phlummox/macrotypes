@@ -35,13 +35,13 @@
    [#:with [(~?Some [V3 ...] (~?∀* (V4 ...) τ_arg) (~Cs [τ_5 τ_6] ...)) ...]
     (syntax-local-introduce #'[τ_arg* ...])]
    [#:with Xs #'[A ... B V1 ... V2 ... V3 ... ... V4 ... ...]]
-   [#:with cs1 (add-constraints/var? #'Xs identifier? '()
+   [#:with cs1 (add-constraints/var? #'Xs could-be-var? '()
                                      #'([τ_3 τ_4] ...
                                         [τ_5 τ_6] ... ...))]
-   [#:with cs2 (add-constraints/var? #'Xs identifier? (stx-map stx->list #'cs1)
+   [#:with cs2 (add-constraints/var? #'Xs could-be-var? (stx-map stx->list #'cs1)
                                      (inst-type/cs #'Xs #'cs1
                                        #'([τ_fn τ_fn-expected])))]
-   [#:with cs3 (add-constraints/var? #'Xs identifier? (stx-map stx->list #'cs2)
+   [#:with cs3 (add-constraints/var? #'Xs could-be-var? (stx-map stx->list #'cs2)
                                      (inst-type/cs #'Xs #'cs2
                                        #'([τ_arg A] ...)))]
    [#:with τ_out (some/inst/generalize #'Xs

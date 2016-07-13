@@ -10,11 +10,12 @@
                      ~?Some
                      ~Cs
                      some/inst/generalize
+                     could-be-var?
                      tycons
                      ))
 
 (require macrotypes/typecheck
-         (only-in "stlc.rkt" define-type-constructor)
+         (only-in "stlc.rkt" define-type-constructor #%type)
          (only-in "sysf.rkt" ∀ ~∀ ∀?)
          (for-syntax racket/base
                      syntax/parse
@@ -104,7 +105,7 @@
            #'rst
            (append (find-free-Xs Xs #'b) Vs))]
          ;; TODO: Generalize this for not-in-Xs identifiers deeper within #'b
-         [(and (identifier? #'b) (not (member #'b Xs free-identifier=?)))
+         [(and (could-be-var? #'b) (not (member #'b Xs free-identifier=?)))
           (find-constrainable-vars
            Xs
            #'rst
@@ -131,10 +132,15 @@
                #:when (member X Ys free-identifier=?))
       X))
 
+  ;; could-be-var? : Any -> Boolean
+  (define (could-be-var? v)
+    (and (identifier? v)
+         (not (free-identifier=? v #'#%type))))
+
   ;; some/inst/generalize : (Stx-Listof Id) Type-Stx Constraints -> Type-Stx
   (define (some/inst/generalize Xs* ty* cs1)
     (define Xs (stx->list Xs*))
-    (define cs2 (add-constraints/var? Xs identifier? '() cs1))
+    (define cs2 (add-constraints/var? Xs could-be-var? '() cs1))
     (define Vs (set-minus/Xs (stx-map stx-car cs2) Xs))
     (define constrainable-vars
       (find-constrainable-vars Xs cs2 Vs))

@@ -341,7 +341,7 @@
 (typecheck-fail (ann 1 : Complex) #:with-msg "unbound identifier")
 (typecheck-fail (ann 1 : 1) #:with-msg "not a valid type")
 (typecheck-fail (ann 1 : (λ (x) x)) #:with-msg "not a valid type")
-(typecheck-fail (ann Int : Int) #:with-msg "expected Int, given #%type\n *expression: Int")
+(typecheck-fail (ann Int : Int) #:with-msg "expected: Int\n *given: #%type")
 
 ; let
 (check-type (let () (+ 1 1)) : Int -> 2)
