@@ -89,7 +89,7 @@
                                         ((current-type-eval) (get-expected-type stx)))
        (define initial-cs
          (if (and (syntax-e #'expected-ty) (stx-null? #'Vs))
-             (add-constraints Xs '() (list (list #'expected-ty #'τ_outX)))
+             (add-constraints Xs '() (list (list #'τ_outX #'expected-ty)))
              '()))
        (syntax-parse stx
          [(_ e_fn . args)
@@ -104,13 +104,13 @@
                                    a)))
                 (values 
                  (cons #'a- as-)
-                 (add-constraints Xs cs (list (list ty_in #'ty_a))
-                                  (list (list (inst-type/cs/orig
+                 (add-constraints Xs cs (list (list #'ty_a ty_in))
+                                  (list (list #'ty_a
+                                              (inst-type/cs/orig
                                                Xs cs ty_in
                                                (λ (id1 id2)
                                                  (equal? (syntax->datum id1)
-                                                         (syntax->datum id2))))
-                                              #'ty_a))))))
+                                                         (syntax->datum id2))))))))))
 
          (list (reverse as-) Xs cs)])]))
 

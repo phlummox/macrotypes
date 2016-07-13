@@ -56,7 +56,7 @@
                                (add-expected-ty e_arg τ_in)
                                e_arg)))
             ;             (displayln #'(e τ))
-            (define cs* (add-constraints Xs cs #`([#,τ_in τ])))
+            (define cs* (add-constraints Xs cs #`([τ #,τ_in])))
             (values cs* (cons #'[e τ] e+τs)))])
       (list cs (reverse (stx->list e+τs))))))
 
@@ -138,7 +138,7 @@
                         (syntax->datum #'(e_arg ...))
                         (stx-map type->str #'(τ_arg ...)))
                    "\n")))
-   #:with cs (add-constraints #'(X ...) '() #'([τ_inX τ_arg] ...))
+   #:with cs (add-constraints #'(X ...) '() #'([τ_arg τ_inX] ...))
    #:with (τ_in ... τ_out) (inst-types/cs #'(X ...) #'cs #'(τ_inX ... τ_outX))
    ; some code duplication
    #:fail-unless (typechecks? #'(τ_arg ...) #'(τ_in ...))
