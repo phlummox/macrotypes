@@ -137,10 +137,10 @@
     (and (identifier? v)
          (not (free-identifier=? v #'#%type))))
 
-  ;; some/inst/generalize : (Stx-Listof Id) Type-Stx Constraints -> Type-Stx
-  (define (some/inst/generalize Xs* ty* cs1)
+  ;; some/inst/generalize : (Stx-Listof Id) Type-Stx (Listof Constraints) -> Type-Stx
+  (define (some/inst/generalize Xs* ty* css1)
     (define Xs (stx->list Xs*))
-    (define cs2 (add-constraints/var? Xs could-be-var? '() cs1))
+    (define cs2 (add-constraintss/var? Xs could-be-var? '() css1))
     (define Vs (set-minus/Xs (stx-map stx-car cs2) Xs))
     (define constrainable-vars
       (find-constrainable-vars Xs cs2 Vs))

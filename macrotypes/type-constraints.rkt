@@ -2,6 +2,8 @@
 
 (provide add-constraints
          add-constraints/var?
+         add-constraintss
+         add-constraintss/var?
          lookup
          lookup-Xs/keep-unsolved
          inst-type
@@ -28,6 +30,9 @@
     (member X Xs* free-identifier=?))
   (add-constraints/var? Xs* X? substs new-cs orig-cs))
 
+;; add-constraints :
+;; (Listof Id) [Any -> Boolean] (Listof (List Id Type)) (Stx-Listof (Stx-List Stx Stx))
+;; -> (Listof (List Id Type))
 (define (add-constraints/var? Xs* var? substs new-cs [orig-cs new-cs])
   (define Xs (stx->list Xs*))
   (define Ys (stx-map stx-car substs))
@@ -116,6 +121,26 @@
                                      (string-join (map type->str (stx-map stx-car orig-cs)) ", "))
                        #'b #'a)])])]))
 
+;; add-constraintss :
+;; (Listof Id) (Listof (List Id Type)) (Listof (Stx-Listof (Stx-List Stx Stx)))
+;; -> (Listof (List Id Type))
+;; Adds the new sets of constaints to a substituion in stages, using
+;; the type unification algorithm for local type inference.
+(define (add-constraintss Xs substs css)
+  (for/fold ([substs substs])
+            ([cs (in-list css)])
+    (add-constraints Xs substs (cs-substitute-entries substs cs))))
+
+;; add-constraints :
+;; (Listof Id) [Any -> Boolean] (Listof (List Id Type)) (Listof (Stx-Listof (Stx-List Stx Stx)))
+;; -> (Listof (List Id Type))
+(define (add-constraintss/var? Xs var? substs css)
+  (for/fold ([substs substs])
+            ([cs (in-list css)])
+    (add-constraints/var? Xs var? substs (cs-substitute-entries substs cs))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (define (datum=? x y)
   (equal? (syntax->datum x) (syntax->datum y)))
 
@@ -135,6 +160,13 @@
   (for/list ([c (in-list (stx->list cs))])
     (list (inst-type/orig (list b) (list a) (stx-car c) datum=?)
           (inst-type/orig (list b) (list a) (stx-cadr c) datum=?))))
+
+;; cs-substitute-entries :
+;; (Listof (List Id Type)) (Stx-Listof (Stx-List Stx Stx)) -> (Listof (List Stx Stx))
+(define (cs-substitute-entries entries cs)
+  (for/fold ([cs cs])
+            ([entry (in-list entries)])
+    (cs-substitute-entry entry cs)))
 
 ;; occurs-check : (List Id Type) (Stx-Listof (Stx-List Stx Stx)) -> (List Id Type)
 (define (occurs-check entry orig-cs)

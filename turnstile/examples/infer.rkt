@@ -19,7 +19,7 @@
    [#:with (~?Some [V ...] τ_body (~Cs [id_2 τ_2] ...)) (syntax-local-introduce #'τ_body*)]
    [#:with τ_fn (some/inst/generalize #'[X- ... V ...]
                                       #'(→ X- ... τ_body)
-                                      #'([id_2 τ_2] ...))]
+                                      (list #'([id_2 τ_2] ...)))]
    --------
    [⊢ [[_ ≫ (λ- (x- ...) body-)] ⇒ : τ_fn]]])
 
@@ -35,18 +35,13 @@
    [#:with [(~?Some [V3 ...] (~?∀* (V4 ...) τ_arg) (~Cs [τ_5 τ_6] ...)) ...]
     (syntax-local-introduce #'[τ_arg* ...])]
    [#:with Xs #'[A ... B V1 ... V2 ... V3 ... ... V4 ... ...]]
-   [#:with cs1 (add-constraints/var? #'Xs could-be-var? '()
-                                     #'([τ_3 τ_4] ...
-                                        [τ_5 τ_6] ... ...))]
-   [#:with cs2 (add-constraints/var? #'Xs could-be-var? (stx-map stx->list #'cs1)
-                                     (inst-type/cs #'Xs #'cs1
-                                       #'([τ_fn τ_fn-expected])))]
-   [#:with cs3 (add-constraints/var? #'Xs could-be-var? (stx-map stx->list #'cs2)
-                                     (inst-type/cs #'Xs #'cs2
-                                       #'([τ_arg A] ...)))]
    [#:with τ_out (some/inst/generalize #'Xs
                                        #'B
-                                       #'cs3)]
+                                       (list
+                                        #'([τ_3 τ_4] ...
+                                           [τ_5 τ_6] ... ...)
+                                        #'([τ_fn τ_fn-expected])
+                                        #'([τ_arg A] ...)))]
    --------
    [⊢ [[_ ≫ (#%app- e_fn- e_arg- ...)] ⇒ : τ_out]]])
 
@@ -65,11 +60,12 @@
    [#:with Xs #'[R V1 ... V2 ... V3 ... V4 ... V5 ... V6 ...]]
    [#:with τ_out (some/inst/generalize #'Xs
                                        #'R
-                                       #'([τ_t R]
-                                          [τ_e R]
-                                          [τ_1 τ_2] ...
-                                          [τ_3 τ_4] ...
-                                          [τ_5 τ_6] ...))]
+                                       (list
+                                        #'([τ_1 τ_2] ...
+                                           [τ_3 τ_4] ...
+                                           [τ_5 τ_6] ...)
+                                        #'([τ_t R]
+                                           [τ_e R])))]
    --------
    [⊢ [[_ ≫ (if- e_c- e_t- e_e-)] ⇒ : τ_out]]])
 
@@ -81,7 +77,9 @@
    [#:with Bool* ((current-type-eval) #'Bool)]
    [#:with τ_out (some/inst/generalize #'[V1 ... ... V2 ... ...]
                                        #'Bool
-                                       #'([τ_e Bool*] ... [τ_1 τ_2] ... ...))]
+                                       (list
+                                        #'([τ_1 τ_2] ... ...)
+                                        #'([τ_e Bool*] ...)))]
    --------
    [⊢ [[_ ≫ (or- e- ...)] ⇒ : τ_out]]])
 
@@ -93,7 +91,9 @@
    [#:with Bool* ((current-type-eval) #'Bool)]
    [#:with τ_out (some/inst/generalize #'[V1 ... ... V2 ... ...]
                                        #'Bool
-                                       #'([τ_e Bool*] ... [τ_1 τ_2] ... ...))]
+                                       (list
+                                        #'([τ_1 τ_2] ... ...)
+                                        #'([τ_e Bool*] ...)))]
    --------
    [⊢ [[_ ≫ (and- e- ...)] ⇒ : τ_out]]])
 
@@ -106,9 +106,9 @@
     (syntax-local-introduce #'τ_e**)]
    [#:with τ_e (some/inst/generalize #'[X ... V1 ... V2 ...]
                                      #'τ_ann
-                                     #'([τ_e* τ_ann]
-                                        [τ_1 τ_2]
-                                        ...))]
+                                     (list
+                                      #'([τ_1 τ_2] ...)
+                                      #'([τ_e* τ_ann])))]
    --------
    [⊢ [[_ ≫ e-] ⇒ : τ_e]]])
 
@@ -121,9 +121,9 @@
    [#:with τ_e ((current-type-eval)
                 (some/inst/generalize #'[X ... V1 ... V2 ...]
                                       #'τ_ann
-                                      #'([τ_e* τ_ann]
-                                         [τ_1 τ_2]
-                                         ...)))]
+                                      (list
+                                       #'([τ_1 τ_2] ...)
+                                       #'([τ_e* τ_ann]))))]
    [τ_e τ⊑ τ.norm #:for e]
    --------
    [⊢ [[_ ≫ e-] ⇒ : τ.norm]]])
