@@ -12,7 +12,7 @@
 (define-typed-syntax λ
   [(λ (x:id ...) body:expr) ≫
    [#:with [X ...]
-    (for/list ([X (in-list (generate-temporaries #'[x ...]))])
+    (for/list ([X (in-list (generate-temporaries (stx-map id-titlecase #'[x ...])))])
       (add-orig X X))]
    [([X : #%type ≫ X-] ...) ([x : X ≫ x-] ...)
     ⊢ [[body ≫ body-] ⇒ : τ_body*]]
@@ -25,8 +25,8 @@
 
 (define-typed-syntax #%app
   [(_ e_fn e_arg ...) ≫
-   [#:with [A ...] (generate-temporaries #'[e_arg ...])]
-   [#:with B (generate-temporary 'result)]
+   [#:with [A ...] (map id-titlecase (generate-temporaries #'[e_arg ...]))]
+   [#:with B (generate-temporary 'R)]
    [⊢ [[e_fn ≫ e_fn-] ⇒ : τ_fn*]]
    [#:with (~?Some [V1 ...] (~?∀ (V2 ...) τ_fn) (~Cs [τ_3 τ_4] ...))
     (syntax-local-introduce #'τ_fn*)]
@@ -47,7 +47,7 @@
 
 (define-typed-syntax if
   [(if e_c:expr e_t:expr e_e:expr) ≫
-   [#:with R (generate-temporary 'if-res)]
+   [#:with R (generate-temporary 'R)]
    [⊢ [[e_c ≫ e_c-] ⇒ : τ_c*]]
    [#:with (~?Some [V1 ...] (~?∀* (V2 ...) _) (~Cs [τ_1 τ_2] ...))
     (syntax-local-introduce #'τ_c*)]
@@ -114,7 +114,7 @@
 
 (define-typed-syntax letrec
   [(letrec ([x e_x] ...) e_body) ≫
-   [#:with [X ...] (generate-temporaries (stx-map id-upcase #'[x ...]))]
+   [#:with [X ...] (generate-temporaries (stx-map id-titlecase #'[x ...]))]
    [#:with R (generate-temporary 'R)]
    [([X : #%type ≫ X-] ...) ([x : X ≫ x-] ...)
     ⊢ [[e_x ≫ e_x-] ⇒ : τ_x*] ... [[e_body ≫ e_body-] ⇒ : τ_body*]]

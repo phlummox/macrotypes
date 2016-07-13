@@ -47,13 +47,13 @@
 
 (typecheck-fail
  (λ (f) (f f))
- #:with-msg "couldn't unify f[0-9]+ and \\(→ f[0-9]+ result[0-9]+\\) because one contains the other")
+ #:with-msg "couldn't unify F[0-9]+ and \\(→ F[0-9]+ R[0-9]+\\) because one contains the other")
 
 (typecheck-fail
  (λ (f)
    ((λ (g) (f (λ (x) ((g g) x))))
     (λ (g) (f (λ (x) ((g g) x))))))
- #:with-msg "couldn't unify g[0-9]+ and \\(→ g[0-9]+ result[0-9]+\\) because one contains the other")
+ #:with-msg "couldn't unify G[0-9]+ and \\(→ G[0-9]+ R[0-9]+\\) because one contains the other")
 
 (define fact-builder
   (λ (fact)
@@ -207,7 +207,7 @@
 (check-not-type g3 : (∀ (A B) (→ (List A) B)))
 (typecheck-fail (g3)
  ; TODO: more precise err msg
- #:with-msg "expected: \\(→ result[0-9]+\\)\n *given: \\(→ \\(List X\\) X\\)")
+ #:with-msg "expected: \\(→ R[0-9]+\\)\n *given: \\(→ \\(List X\\) X\\)")
 (check-type (g3 empty) : (∀ (X) X)) ; runtime fail
 (check-type (g3 (cons 1 empty)) : Int -> 1)
 (check-type (g3 (cons "1" empty)) : String -> "1")
@@ -227,7 +227,7 @@
 ; list abbrv
 (check-type (list 1 2 3) : (List Int))
 (typecheck-fail (list 1 "3")
- #:with-msg "expected: temp[0-9]+, \\(List temp[0-9]+\\)\n *given: Int, \\(List String\\)")
+ #:with-msg "expected: Temp[0-9]+, \\(List Temp[0-9]+\\)\n *given: Int, \\(List String\\)")
 
 
 (define/rec #:∀ (X Y) (map [f : (→ X Y)] [lst : (List X)]) -> (List Y)
@@ -484,7 +484,7 @@
 (typecheck-fail
  (λ (f) ((ann f : Int) 1 2))
  #:with-msg
- "expected: \\(→ temp[0-9]+ temp[0-9]+ result[0-9]+\\)\n *given: Int")
+ "expected: \\(→ Temp[0-9]+ Temp[0-9]+ R[0-9]+\\)\n *given: Int")
 
 (check-type (λ (f x y) (f x y))
             : (∀ (X Y R) (→ (→ X Y R) X Y R)))
@@ -494,11 +494,11 @@
 (typecheck-fail
  (+ 1 (λ (x) x))
  #:with-msg
- "expected: Int, Int\n *given: Int, \\(→ x[0-9]+ x[0-9]+\\)")
+ "expected: Int, Int\n *given: Int, \\(→ X[0-9]+ X[0-9]+\\)")
 (check-type (λ (x) (+ x x)) : (→ Int Int))
 (typecheck-fail
  ((λ (x y) y) 1)
- #:with-msg "expected: \\(→ temp[0-9]+ result[0-9]+\\)\n *given: \\(→ x[0-9]+ y[0-9]+ y[0-9]+\\)")
+ #:with-msg "expected: \\(→ Temp[0-9]+ R[0-9]+\\)\n *given: \\(→ X[0-9]+ Y[0-9]+ Y[0-9]+\\)")
 
 (check-type ((λ (x) (+ x x)) 10) : Int -> 20)
 

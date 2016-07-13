@@ -70,9 +70,17 @@
 (define (generate-temporariesss stx)
   (stx-map generate-temporariess stx))
 
+;; id-titlecase : Id -> Id
+(define (id-titlecase x)
+  (datum->syntax x (symbol-titlecase (syntax-e x)) x x))
+
 ;; id-upcase : Id -> Id
 (define (id-upcase x)
   (datum->syntax x (symbol-upcase (syntax-e x)) x x))
+
+;; symbol-titlecase : Symbol -> Symbol
+(define (symbol-titlecase sym)
+  (string->symbol (string-titlecase (symbol->string sym))))
 
 ;; symbol-upcase : Symbol -> Symbol
 (define (symbol-upcase sym)
