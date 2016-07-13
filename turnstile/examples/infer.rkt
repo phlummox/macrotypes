@@ -97,6 +97,21 @@
    --------
    [⊢ [[_ ≫ (and- e- ...)] ⇒ : τ_out]]])
 
+(define-typed-syntax let
+  [(let ([x e_x] ...) e_body) ≫
+   [⊢ [[e_x ≫ e_x-] ⇒ : τ_x*] ...]
+   [#:with [(~?Some [V1 ...] (~?∀* (V2 ...) τ_x) (~Cs [τ_1 τ_2] ...)) ...]
+    (syntax-local-introduce #'[τ_x* ...])]
+   [() ([x : τ_x ≫ x-] ...) ⊢ [[e_body ≫ e_body-] ⇒ : τ_body*]]
+   [#:with (~?Some [V3 ...] (~?∀* (V4 ...) τ_body) (~Cs [τ_3 τ_4] ...))
+    (syntax-local-introduce #'τ_body*)]
+   [#:with τ_out (some/inst/generalize #'[V1 ... ... V2 ... ...]
+                                       #'τ_body
+                                       (list
+                                        #'([τ_1 τ_2] ... ... [τ_3 τ_4] ...)))]
+   --------
+   [⊢ [[_ ≫ (let- ([x- e_x-] ...) e_body-)] ⇒ : τ_out]]])
+
 
 (define-typed-syntax ann #:datum-literals (:)
   [(ann e:expr : τ:type) ≫

@@ -10,11 +10,6 @@
    --------
    [_ ≻ (cons a (list b ...))]])
 
-(define-typed-syntax let
-  [(let ([x:id v:expr] ...) body:expr) ≫
-   --------
-   [_ ≻ ((λ (x ...) body) v ...)]])
-
 (define-typed-syntax let*
   [(let* () body:expr) ≫
    --------

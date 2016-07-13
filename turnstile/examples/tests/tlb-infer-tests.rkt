@@ -141,7 +141,7 @@
 ; function polymorphic in list element
 (define/rec #:∀ (X) (g2 [lst : (List X)]) -> (List X) lst)
 (check-type g2 : (∀ (X) (→ (List X) (List X))))
-(typecheck-fail (g2 1) #:with-msg "couldn't unify \\(List X\\) and Int") ; TODO: more precise err msg
+(typecheck-fail (g2 1) #:with-msg "expected: \\(List X\\)\n *given: Int")
 (check-type (g2 empty) : (∀ (X) (List X)) -> empty)
 (check-type (g2 (cons 1 empty)) : (List Int) -> (cons 1 empty))
 (check-type (g2 (cons "1" empty)) : (List String) -> (cons "1" empty))
@@ -347,16 +347,16 @@
 (check-type (let () (+ 1 1)) : Int -> 2)
 (check-type (let ([x 10]) (+ 1 2)) : Int -> 3)
 (check-type (let ([x 10] [y 20]) ((λ (z a) (+ a z)) x y)) : Int -> 30)
-;; TODO: better error message
 (typecheck-fail
- (let ([x #f]) (+ x 1)))
+ (let ([x #f]) (+ x 1))
+ #:with-msg "expected: Int, Int\n *given: Bool, Int")
 (typecheck-fail (let ([x 10] [y (+ x 1)]) (+ x y))
                 #:with-msg "x: unbound identifier")
 
 (check-type (let* ([x 10] [y (+ x 1)]) (+ x y)) : Int -> 21)
-;; TODO: better error message
 (typecheck-fail
- (let* ([x #t] [y (+ x 1)]) 1))
+ (let* ([x #t] [y (+ x 1)]) 1)
+ #:with-msg "expected: Int, Int\n *given: Bool, Int")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
