@@ -70,6 +70,14 @@
 (define (generate-temporariesss stx)
   (stx-map generate-temporariess stx))
 
+;; id-upcase : Id -> Id
+(define (id-upcase x)
+  (datum->syntax x (symbol-upcase (syntax-e x)) x x))
+
+;; symbol-upcase : Symbol -> Symbol
+(define (symbol-upcase sym)
+  (string->symbol (string-upcase (symbol->string sym))))
+
 ;; transfers properties and src loc from orig to new
 (define (transfer-stx-props new orig #:ctx [ctx new])
   (datum->syntax ctx (syntax-e new) orig orig))

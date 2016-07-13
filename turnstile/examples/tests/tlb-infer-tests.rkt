@@ -111,6 +111,61 @@
 (check-type (λ (x) (match x with [(tup: (v: y) (v: z)) -> z]))
             : (∀ (Y Z) (→ (× Y Z) Z)))
 
+;; letrec tests
+
+(check-type (letrec () 1) : Int -> 1)
+(check-type (letrec ([x 1]) x) : Int -> 1)
+
+(check-type (letrec ([x (begin (λ () x) 5)]) x) : Int -> 5)
+(check-type (letrec ([x (begin (λ () (ann x : Int)) 5)]) x) : Int -> 5)
+(typecheck-fail
+ (letrec ([x (begin (λ () (ann x : Bool)) 5)]) x)
+ #:with-msg "expected: Bool\n *given: Int")
+
+(check-type (letrec ([f (λ () x)] [x 5])
+              (f))
+            : Int -> 5)
+
+(check-type
+ (letrec ([factorial (λ (n)
+                       (if (zero? n)
+                           1
+                           (* n (factorial (sub1 n)))))]
+          [mapper (λ (f)
+                    (λ (lst)
+                      (if (empty? lst)
+                          empty
+                          (cons (f (first lst)) ((mapper f) (rest lst))))))])
+   ((mapper factorial) (list 0 1 2 3 4 5 6 7 8)))
+ : (List Int) -> (list 1 1 2 6 24 120 720 5040 40320))
+
+(define mapper
+  (letrec
+      ([mapper (λ (f)
+                 (λ (lst)
+                   (if (empty? lst)
+                       empty
+                       (cons (f (first lst)) ((mapper f) (rest lst))))))])
+    mapper))
+(check-type mapper : (∀ (A B) (→ (→ A B) (→ (List A) (List B)))))
+(check-type ((mapper (mapper fact)) (list (list 0 1 2) (list 3 4 5) (list 6 7 8)))
+            : (List (List Int))
+            -> (list (list 1 1 2) (list 6 24 120) (list 720 5040 40320)))
+
+;; TODO: figure out how to make this local mapper function polymorphic
+#;(check-type
+ (letrec ([factorial (λ (n)
+                       (if (zero? n)
+                           1
+                           (* n (factorial (sub1 n)))))]
+          [mapper (λ (f)
+                    (λ (lst)
+                      (if (empty? lst)
+                          empty
+                          (cons (f (first lst)) ((mapper f) (rest lst))))))])
+   ((mapper (mapper factorial)) (list (list 0 1 2) (list 3 4 5) (list 6 7 8))))
+ : (List (List Int)) -> (list (list 1 1 2) (list 6 24 120) (list 720 5040 40320)))
+
 ;; from the old infer tests
 
 (check-type (λ (x) (+ x 1)) : (→ Int Int))
@@ -358,66 +413,56 @@
  (let* ([x #t] [y (+ x 1)]) 1)
  #:with-msg "expected: Int, Int\n *given: Bool, Int")
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; TODO: implement letrec and everything else needed for these
-
-#|
 ; letrec
-(typecheck-fail
- (letrec ([(x : Int) #f] [(y : Int) 1]) y)
- #:with-msg
- "letrec: type mismatch\n *expected: +Int, Int\n *given: +Bool, Int\n *expressions: #f, 1")
-(typecheck-fail
- (letrec ([(y : Int) 1] [(x : Int) #f]) x)
- #:with-msg
- "letrec: type mismatch\n *expected: +Int, Int\n *given: +Int, Bool\n *expressions: 1, #f")
+(check-type (letrec ([x #f] [y 1]) y) : Int -> 1)
+(check-type (letrec ([y 1] [x #f]) x) : Bool -> #f)
 
-(check-type (letrec ([(x : Int) 1] [(y : Int) (+ x 1)]) (+ x y)) : Int ⇒ 3)
+(check-type (letrec ([x 1] [y (+ x 1)]) (+ x y)) : Int -> 3)
 
 ;; recursive
 (check-type
- (letrec ([(countdown : (→ Int String))
-           (λ ([i : Int])
+ (letrec ([countdown
+           (λ (i)
              (if (= i 0)
                  "liftoff"
                  (countdown (- i 1))))])
-   (countdown 10)) : String ⇒ "liftoff")
+   (countdown 10)) : String -> "liftoff")
 
 ;; mutually recursive
 (check-type
- (letrec ([(is-even? : (→ Int Bool))
-           (λ ([n : Int])
+ (letrec ([is-even?
+           (λ (n)
              (or (zero? n)
                  (is-odd? (sub1 n))))]
-          [(is-odd? : (→ Int Bool))
-           (λ ([n : Int])
+          [is-odd?
+           (λ (n)
              (and (not (zero? n))
                   (is-even? (sub1 n))))])
-   (is-odd? 11)) : Bool ⇒ #t)
+   (is-odd? 11)) : Bool -> #t)
 
 ;; check some more err msgs
 (typecheck-fail
  (and "1" #f)
- #:with-msg "and: type mismatch: expected Bool, given String\n *expression: \"1\"")
+ #:with-msg
+ "expected: Bool, Bool\n *given: String, Bool")
 (typecheck-fail
  (and #t "2")
  #:with-msg
- "and: type mismatch: expected Bool, given String\n *expression: \"2\"")
+ "expected: Bool, Bool\n *given: Bool, String")
 (typecheck-fail
  (or "1" #f)
  #:with-msg
- "or: type mismatch\n  expected: +Bool, Bool\n *given: +String, Bool\n *expressions: \"1\", #f")
+ "expected: +Bool, Bool\n *given: +String, Bool")
 (typecheck-fail
  (or #t "2")
  #:with-msg
- "or: type mismatch\n  expected: +Bool, Bool\n *given: +Bool, String\n *expressions: #t, \"2\"")
+ "expected: +Bool, Bool\n *given: +Bool, String")
 ;; 2016-03-10: change if to work with non-false vals
 (check-type (if "true" 1 2) : Int -> 1)
 (typecheck-fail
  (if #t 1 "2")
  #:with-msg 
- "branches have incompatible types: Int and String")
+ "couldn't unify Int and String")
 
 ;; tests from stlc+lit-tests.rkt --------------------------
 ; most should pass, some failing may now pass due to added types/forms
@@ -425,39 +470,35 @@
 ;(check-not-type 1 : (Int → Int))
 ;(typecheck-fail "one") ; literal now supported
 ;(typecheck-fail #f) ; literal now supported
-(check-type (λ ([x : Int] [y : Int]) x) : (→ Int Int Int))
-(check-not-type (λ ([x : Int]) x) : Int)
-(check-type (λ ([x : Int]) x) : (→ Int Int))
-(check-type (λ ([f : (→ Int Int)]) 1) : (→ (→ Int Int) Int))
-(check-type ((λ ([x : Int]) x) 1) : Int ⇒ 1)
+(check-type (λ (x y) x) : (∀ (X Y) (→ X Y X)))
+(check-not-type (λ (x) x) : Int)
+(check-type (λ (x) x) : (∀ (X) (→ X X)))
+(check-type (λ (f) 1) : (∀ (X) (→ X Int)))
+(check-type ((λ (x) x) 1) : Int -> 1)
 
 (typecheck-fail
- ((λ ([x : Bool]) x) 1)
+ ((ann (λ (x) x) : (→ Bool Bool)) 1)
  #:with-msg
  "expected: Bool\n *given: Int")
 ;(typecheck-fail (λ ([x : Bool]) x)) ; Bool is now valid type
 (typecheck-fail
- (λ ([f : Int]) (f 1 2))
+ (λ (f) ((ann f : Int) 1 2))
  #:with-msg
- "Expected expression f to have ∀ type, got: Int")
+ "expected: \\(→ temp[0-9]+ temp[0-9]+ result[0-9]+\\)\n *given: Int")
 
-(check-type (λ ([f : (→ Int Int Int)] [x : Int] [y : Int]) (f x y))
-            : (→ (→ Int Int Int) Int Int Int))
-(check-type ((λ ([f : (→ Int Int Int)] [x : Int] [y : Int]) (f x y)) + 1 2)
-            : Int ⇒ 3)
+(check-type (λ (f x y) (f x y))
+            : (∀ (X Y R) (→ (→ X Y R) X Y R)))
+(check-type ((λ (f x y) (f x y)) + 1 2)
+            : Int -> 3)
 
 (typecheck-fail
- (+ 1 (λ ([x : Int]) x))
+ (+ 1 (λ (x) x))
  #:with-msg
- "expected: Int, Int\n *given: Int, \\(→ Int Int\\)")
+ "expected: Int, Int\n *given: Int, \\(→ x[0-9]+ x[0-9]+\\)")
+(check-type (λ (x) (+ x x)) : (→ Int Int))
 (typecheck-fail
- (λ ([x : (→ Int Int)]) (+ x x))
-  #:with-msg
-  "expected: Int, Int\n *given: \\(→ Int Int\\), \\(→ Int Int\\)")
-(typecheck-fail
- ((λ ([x : Int] [y : Int]) y) 1)
- #:with-msg "Wrong number of arguments")
+ ((λ (x y) y) 1)
+ #:with-msg "expected: \\(→ temp[0-9]+ result[0-9]+\\)\n *given: \\(→ x[0-9]+ y[0-9]+ y[0-9]+\\)")
 
-(check-type ((λ ([x : Int]) (+ x x)) 10) : Int ⇒ 20)
+(check-type ((λ (x) (+ x x)) 10) : Int -> 20)
 
-|#

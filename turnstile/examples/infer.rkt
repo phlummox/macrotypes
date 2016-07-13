@@ -1,5 +1,5 @@
 #lang turnstile
-(extends "ext-stlc.rkt" #:except #%app λ ann if let let* begin)
+(extends "ext-stlc.rkt" #:except #%app λ ann if let let* letrec begin)
 (reuse Λ ∀ inst #:from "sysf.rkt")
 (require (only-in "sysf.rkt" ∀ ~∀ ∀? Λ))
 (reuse List #:from "stlc+cons.rkt")
@@ -111,6 +111,24 @@
                                         #'([τ_1 τ_2] ... ... [τ_3 τ_4] ...)))]
    --------
    [⊢ [[_ ≫ (let- ([x- e_x-] ...) e_body-)] ⇒ : τ_out]]])
+
+(define-typed-syntax letrec
+  [(letrec ([x e_x] ...) e_body) ≫
+   [#:with [X ...] (generate-temporaries (stx-map id-upcase #'[x ...]))]
+   [#:with R (generate-temporary 'R)]
+   [([X : #%type ≫ X-] ...) ([x : X ≫ x-] ...)
+    ⊢ [[e_x ≫ e_x-] ⇒ : τ_x*] ... [[e_body ≫ e_body-] ⇒ : τ_body*]]
+   [#:with [(~?Some [V1 ...] (~?∀* (V2 ...) τ_x) (~Cs [τ_1 τ_2] ...)) ...
+            (~?Some [V3 ...] (~?∀* (V4 ...) τ_body) (~Cs [τ_3 τ_4] ...))]
+    (syntax-local-introduce #'[τ_x* ... τ_body*])]
+   [#:with τ_out (some/inst/generalize #'[X- ... R V1 ... ... V2 ... ... V3 ... V4 ...]
+                                       #'R
+                                       (list
+                                        #'([τ_1 τ_2] ... ... [τ_3 τ_4] ...)
+                                        #'([τ_x X-] ...)
+                                        #'([τ_body R])))]
+   --------
+   [⊢ [[_ ≫ (letrec- ([x- e_x-] ...) e_body-)] ⇒ : τ_out]]])
 
 
 (define-typed-syntax ann #:datum-literals (:)
