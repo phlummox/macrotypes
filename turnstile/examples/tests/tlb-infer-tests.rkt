@@ -172,7 +172,7 @@
 ; list abbrv
 (check-type (list 1 2 3) : (List Int))
 (typecheck-fail (list 1 "3")
- #:with-msg "couldn't unify Int and String")
+ #:with-msg "expected: temp[0-9]+, \\(List temp[0-9]+\\)\n *given: Int, \\(List String\\)")
 
 
 (define/rec #:∀ (X Y) (map [f : (→ X Y)] [lst : (List X)]) -> (List Y)
@@ -189,7 +189,9 @@
 (check-type (map add1 empty) : (List Int) -> empty)
 (check-type (map add1 (list)) : (List Int) -> empty)
 (check-type (map add1 (list 1 2 3)) : (List Int) -> (list 2 3 4))
-(typecheck-fail (map add1 (list "1")) #:with-msg "couldn't unify Int and String")
+(typecheck-fail
+ (map add1 (list "1"))
+ #:with-msg "expected: \\(→ X Y\\), \\(List X\\)\n *given: \\(→ Int Int\\), \\(List String\\)")
 (check-type (map (λ (x) (+ x 2)) (list 1 2 3)) : (List Int) -> (list 3 4 5))
 (check-type (map first (list (list 1 2 3) (list 4 5) (list 6))) : (List Int) -> (list 1 4 6))
 
@@ -297,7 +299,7 @@
 (check-type "one" : String) ; literal now supported
 (check-type #f : Bool) ; literal now supported
 
-(check-type (ann (λ (x) x) : (→ Bool Bool)) : (→ Bool Bool)) ; Bool is now valid type
+(check-type (λ (x) (ann x : Bool)) : (→ Bool Bool)) ; Bool is now valid type
 
 ;; Unit
 (check-type (void) : Unit)
@@ -331,38 +333,36 @@
 (check-type ((λ (x) (begin (void) (begin (void) x))) 1) : Int -> 1)
 (check-type ((λ (x) (begin (begin (void) x))) 1) : Int -> 1)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; TODO: implement a new ann, letrec, and everything else needed for these
-
-#|
 ;;ascription
-(check-type (ann 1 : Int) : Int ⇒ 1)
-(check-type ((λ ([x : Int]) (ann x : Int)) 10) : Int ⇒ 10)
-(typecheck-fail (ann 1 : Bool) #:with-msg "expected Bool, given Int\n *expression: 1")
+(check-type (ann 1 : Int) : Int -> 1)
+(check-type ((λ (x) (ann x : Int)) 10) : Int -> 10)
+(typecheck-fail (ann 1 : Bool) #:with-msg "expected: Bool\n *given: Int")
 ;ann errs
 (typecheck-fail (ann 1 : Complex) #:with-msg "unbound identifier")
 (typecheck-fail (ann 1 : 1) #:with-msg "not a valid type")
-(typecheck-fail (ann 1 : (λ ([x : Int]) x)) #:with-msg "not a valid type")
+(typecheck-fail (ann 1 : (λ (x) x)) #:with-msg "not a valid type")
 (typecheck-fail (ann Int : Int) #:with-msg "expected Int, given #%type\n *expression: Int")
 
 ; let
-(check-type (let () (+ 1 1)) : Int ⇒ 2)
-(check-type (let ([x 10]) (+ 1 2)) : Int)
-(check-type (let ([x 10] [y 20]) ((λ ([z : Int] [a : Int]) (+ a z)) x y)) : Int ⇒ 30)
+(check-type (let () (+ 1 1)) : Int -> 2)
+(check-type (let ([x 10]) (+ 1 2)) : Int -> 3)
+(check-type (let ([x 10] [y 20]) ((λ (z a) (+ a z)) x y)) : Int -> 30)
+;; TODO: better error message
 (typecheck-fail
- (let ([x #f]) (+ x 1))
- #:with-msg
- "expected: Int, Int\n *given: Bool, Int")
+ (let ([x #f]) (+ x 1)))
 (typecheck-fail (let ([x 10] [y (+ x 1)]) (+ x y))
                 #:with-msg "x: unbound identifier")
 
-(check-type (let* ([x 10] [y (+ x 1)]) (+ x y)) : Int ⇒ 21)
+(check-type (let* ([x 10] [y (+ x 1)]) (+ x y)) : Int -> 21)
+;; TODO: better error message
 (typecheck-fail
- (let* ([x #t] [y (+ x 1)]) 1)
-  #:with-msg
-  "expected: Int, Int\n *given: Bool, Int")
+ (let* ([x #t] [y (+ x 1)]) 1))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; TODO: implement letrec and everything else needed for these
+
+#|
 ; letrec
 (typecheck-fail
  (letrec ([(x : Int) #f] [(y : Int) 1]) y)

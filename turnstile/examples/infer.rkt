@@ -34,12 +34,19 @@
    [⊢ [[e_arg ≫ e_arg-] ⇒ : τ_arg*] ...]
    [#:with [(~?Some [V3 ...] (~?∀* (V4 ...) τ_arg) (~Cs [τ_5 τ_6] ...)) ...]
     (syntax-local-introduce #'[τ_arg* ...])]
-   [#:with τ_out (some/inst/generalize #'[A ... B V1 ... V2 ... V3 ... ... V4 ... ...]
+   [#:with Xs #'[A ... B V1 ... V2 ... V3 ... ... V4 ... ...]]
+   [#:with cs1 (add-constraints/var? #'Xs identifier? '()
+                                     #'([τ_3 τ_4] ...
+                                        [τ_5 τ_6] ... ...))]
+   [#:with cs2 (add-constraints/var? #'Xs identifier? (stx-map stx->list #'cs1)
+                                     (inst-type/cs #'Xs #'cs1
+                                       #'([τ_fn τ_fn-expected])))]
+   [#:with cs3 (add-constraints/var? #'Xs identifier? (stx-map stx->list #'cs2)
+                                     (inst-type/cs #'Xs #'cs2
+                                       #'([τ_arg A] ...)))]
+   [#:with τ_out (some/inst/generalize #'Xs
                                        #'B
-                                       #'([τ_fn-expected τ_fn]
-                                          [τ_3 τ_4] ...
-                                          [A τ_arg] ...
-                                          [τ_5 τ_6] ... ...))]
+                                       #'cs3)]
    --------
    [⊢ [[_ ≫ (#%app- e_fn- e_arg- ...)] ⇒ : τ_out]]])
 

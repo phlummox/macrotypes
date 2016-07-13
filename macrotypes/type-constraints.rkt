@@ -54,7 +54,7 @@
         ;; #'a and #'b are equal, drop this constraint
         (add-constraints/var? Xs var? substs #'rst orig-cs)]
        [else
-        (define entry (occurs-check (list #'a #'b) orig-cs))
+        (define entry (reorder-entry Xs (occurs-check (list #'a #'b) orig-cs)))
         (add-constraints/var?
          Xs
          var?
@@ -84,9 +84,9 @@
         (unless (and (identifier? #'b) (free-identifier=? #'a #'b))
           (type-error #:src (get-orig #'b)
                       #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
-                                    (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
-                                    (string-join (map type->str (stx-map stx-cadr orig-cs)) ", "))
-                      #'a #'b))
+                                    (string-join (map type->str (stx-map stx-cadr orig-cs)) ", ")
+                                    (string-join (map type->str (stx-map stx-car orig-cs)) ", "))
+                      #'b #'a))
         (add-constraints/var? Xs
                               var?
                               substs
@@ -112,9 +112,9 @@
           [else
            (type-error #:src (get-orig #'b)
                        #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
-                                     (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
-                                     (string-join (map type->str (stx-map stx-cadr orig-cs)) ", "))
-                       #'a #'b)])])]))
+                                     (string-join (map type->str (stx-map stx-cadr orig-cs)) ", ")
+                                     (string-join (map type->str (stx-map stx-car orig-cs)) ", "))
+                       #'b #'a)])])]))
 
 (define (datum=? x y)
   (equal? (syntax->datum x) (syntax->datum y)))
@@ -145,10 +145,20 @@
                                     "couldn't unify ~~a and ~~a because one contains the other\n"
                                     "  expected: ~a\n"
                                     "  given: ~a")
-                                   (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
-                                   (string-join (map type->str (stx-map stx-cadr orig-cs)) ", "))
+                                   (string-join (map type->str (stx-map stx-cadr orig-cs)) ", ")
+                                   (string-join (map type->str (stx-map stx-car orig-cs)) ", "))
                      a b)]
         [else entry]))
+
+;; reorder-entry : (Listof Id) (List Id Type) -> (List Id Type)
+(define (reorder-entry Xs entry)
+  (match-define (list a b) entry)
+  (cond [(and (not (member a Xs free-identifier=?))
+              (identifier? b)
+              (member b Xs free-identifier=?))
+         (list b a)]
+        [else
+         entry]))
 
 (define (lookup x substs)
   (syntax-parse substs
