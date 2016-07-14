@@ -111,6 +111,14 @@
 (check-type (λ (x) (match x with [(tup: (v: y) (v: z)) -> z]))
             : (∀ (Y Z) (→ (× Y Z) Z)))
 
+;; let tests
+
+(check-type (let ([f (λ (x) x)])
+              (if (f #true)
+                  (f 5)
+                  (f 6)))
+            : Int -> 5)
+
 ;; letrec tests
 
 (check-type (letrec () 1) : Int -> 1)
@@ -152,8 +160,8 @@
             : (List (List Int))
             -> (list (list 1 1 2) (list 6 24 120) (list 720 5040 40320)))
 
-;; TODO: figure out how to make this local mapper function polymorphic
-#;(check-type
+;; This local mapper function is polymorphic!
+(check-type
  (letrec ([factorial (λ (n)
                        (if (zero? n)
                            1

@@ -100,12 +100,12 @@
 (define-typed-syntax let
   [(let ([x e_x] ...) e_body) ≫
    [⊢ [[e_x ≫ e_x-] ⇒ : τ_x*] ...]
-   [#:with [(~?Some [V1 ...] (~?∀* (V2 ...) τ_x) (~Cs [τ_1 τ_2] ...)) ...]
+   [#:with [(~?Some [V1 ...] τ_x (~Cs [τ_1 τ_2] ...)) ...]
     (syntax-local-introduce #'[τ_x* ...])]
    [() ([x : τ_x ≫ x-] ...) ⊢ [[e_body ≫ e_body-] ⇒ : τ_body*]]
-   [#:with (~?Some [V3 ...] (~?∀* (V4 ...) τ_body) (~Cs [τ_3 τ_4] ...))
+   [#:with (~?Some [V3 ...] τ_body (~Cs [τ_3 τ_4] ...))
     (syntax-local-introduce #'τ_body*)]
-   [#:with τ_out (some/inst/generalize #'[V1 ... ... V2 ... ...]
+   [#:with τ_out (some/inst/generalize #'[V1 ... ... V3 ...]
                                        #'τ_body
                                        (list
                                         #'([τ_1 τ_2] ... ... [τ_3 τ_4] ...)))]
@@ -117,18 +117,34 @@
    [#:with [X ...] (generate-temporaries (stx-map id-titlecase #'[x ...]))]
    [#:with R (generate-temporary 'R)]
    [([X : #%type ≫ X-] ...) ([x : X ≫ x-] ...)
-    ⊢ [[e_x ≫ e_x-] ⇒ : τ_x*] ... [[e_body ≫ e_body-] ⇒ : τ_body*]]
-   [#:with [(~?Some [V1 ...] (~?∀* (V2 ...) τ_x) (~Cs [τ_1 τ_2] ...)) ...
-            (~?Some [V3 ...] (~?∀* (V4 ...) τ_body) (~Cs [τ_3 τ_4] ...))]
-    (syntax-local-introduce #'[τ_x* ... τ_body*])]
-   [#:with τ_out (some/inst/generalize #'[X- ... R V1 ... ... V2 ... ... V3 ... V4 ...]
+    ⊢ [[e_x ≫ e_x-] ⇒ : τ_x*] ...]
+   [#:with [(~?Some [V1 ...] (~?∀* (V2 ...) τ_x) (~Cs [τ_1 τ_2] ...)) ...]
+    (syntax-local-introduce #'[τ_x* ...])]
+   [#:with cs (add-constraintss/var? #'[X- ... V1 ... ... V2 ... ...]
+                                     identifier?
+                                     '()
+                                     (list
+                                      #'([τ_1 τ_2] ... ...)
+                                      #'([τ_x X-] ...)))]
+   [#:with [(~?Some [V12 ...] τ_x+ (~Cs [τ_12 τ_22] ...)) ...]
+    (for/list ([X (in-list (syntax->list #'[X- ...]))])
+      (some/inst/generalize #'[X- ... V1 ... ... V2 ... ...]
+                            X
+                            (list #'cs)))]
+   [() ([x : τ_x+ ≫ x--] ...)
+    ⊢ [[e_body ≫ e_body-] ⇒ : τ_body*]]
+   [#:with (~?Some [V3 ...] (~?∀* (V4 ...) τ_body) (~Cs [τ_3 τ_4] ...))
+    (syntax-local-introduce #'τ_body*)]
+   [#:with τ_out (some/inst/generalize #'[X- ... R V1 ... ... V3 ... V4 ...]
                                        #'R
                                        (list
-                                        #'([τ_1 τ_2] ... ... [τ_3 τ_4] ...)
-                                        #'([τ_x X-] ...)
+                                        #'([τ_12 τ_22] ... ... [τ_3 τ_4] ...)
                                         #'([τ_body R])))]
    --------
-   [⊢ [[_ ≫ (letrec- ([x- e_x-] ...) e_body-)] ⇒ : τ_out]]])
+   [⊢ [[_ ≫ (letrec- ([x- e_x-] ...)
+              (let- ([x-- x-] ...)
+                e_body-))]
+       ⇒ : τ_out]]])
 
 
 (define-typed-syntax ann #:datum-literals (:)
