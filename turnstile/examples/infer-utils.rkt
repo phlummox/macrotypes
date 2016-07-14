@@ -12,6 +12,7 @@
                      some/inst/generalize
                      could-be-var?
                      tycons
+                     gen-alphabetical-tyvars
                      ))
 
 (require macrotypes/typecheck
@@ -20,6 +21,9 @@
          (for-syntax racket/base
                      syntax/parse
                      macrotypes/type-constraints))
+
+(module+ test
+  (require (for-syntax rackunit)))
 
 ;; (Some [X ...] τ_body (Constraints (Constraint τ_1 τ_2) ...))
 (define-type-constructor Some #:arity = 2 #:bvs >= 0)
@@ -179,5 +183,85 @@
       ((current-type-eval) #`(∀ (X ...) (#,id X ...))))
     (inst-type/cs #'[X- ...] #'([X- arg] ...) #'body))
 
+  ;; gen-alphabetical-tyvars : (Stx-Listof Any) -> (Listof Id)
+  (define (gen-alphabetical-tyvars vs)
+    (generate-temporaries
+     (for/list ([i (in-range (stx-length vs))])
+       (string-titlecase (alphabetical-string (add1 i))))))
+
+  (define alphabet (string->list "abcdefghijklmnopqrstuvwxyz"))
+
+  ;; alphabetical-string : Positive-Integer -> String
+  (define (alphabetical-string i)
+    (list->string (alphabetical-char-list i (list))))
+
+  ;; alphabetic-char-list : Positive-Integer (Listof Char) -> (Listof Char)
+  (define (alphabetical-char-list i acc)
+    (define-values [q r]
+      ;; anyone know why there's a sub1 here?
+      (quotient/remainder (sub1 i) 26))
+    (cond [(zero? q)
+           (cons (list-ref alphabet r) acc)]
+          [else
+           (alphabetical-char-list q
+             (cons (list-ref alphabet r) acc))]))
+
   )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(module+ test
+  (begin-for-syntax
+    (define alpha alphabetical-string)
+    (check-equal? (alpha 1) "a")
+    (check-equal? (alpha 2) "b")
+    (check-equal? (alpha 3) "c")
+    (check-equal? (alpha 26) "z")
+    (check-equal? (alpha (+ (* 1 26) 1)) "aa")
+    (check-equal? (alpha (+ (* 1 26) 2)) "ab")
+    (check-equal? (alpha (+ (* 1 26) 3)) "ac")
+    (check-equal? (alpha (+ (* 1 26) 26)) "az")
+    (check-equal? (alpha (+ (* 2 26) 1)) "ba")
+    (check-equal? (alpha (+ (* 2 26) 2)) "bb")
+    (check-equal? (alpha (+ (* 2 26) 3)) "bc")
+    (check-equal? (alpha (+ (* 2 26) 26)) "bz")
+    (check-equal? (alpha (+ (* 3 26) 1)) "ca")
+    (check-equal? (alpha (+ (* 3 26) 2)) "cb")
+    (check-equal? (alpha (+ (* 3 26) 3)) "cc")
+    (check-equal? (alpha (+ (* 3 26) 26)) "cz")
+    (check-equal? (alpha (+ (* 26 26) 1)) "za")
+    (check-equal? (alpha (+ (* 26 26) 2)) "zb")
+    (check-equal? (alpha (+ (* 26 26) 3)) "zc")
+    (check-equal? (alpha (+ (* 26 26) 26)) "zz")
+    (check-equal? (alpha (+ (* 26 26) 1)) "za")
+    (check-equal? (alpha (+ (* 26 26) 2)) "zb")
+    (check-equal? (alpha (+ (* 26 26) 3)) "zc")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 1) 26) 1)) "aaa")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 1) 26) 2)) "aab")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 1) 26) 3)) "aac")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 2) 26) 1)) "aba")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 2) 26) 2)) "abb")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 2) 26) 3)) "abc")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 3) 26) 1)) "aca")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 3) 26) 2)) "acb")
+    (check-equal? (alpha (+ (* (+ (* 1 26) 3) 26) 3)) "acc")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 1) 26) 1)) "baa")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 1) 26) 2)) "bab")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 1) 26) 3)) "bac")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 2) 26) 1)) "bba")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 2) 26) 2)) "bbb")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 2) 26) 3)) "bbc")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 3) 26) 1)) "bca")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 3) 26) 2)) "bcb")
+    (check-equal? (alpha (+ (* (+ (* 2 26) 3) 26) 3)) "bcc")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 1) 26) 1)) "caa")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 1) 26) 2)) "cab")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 1) 26) 3)) "cac")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 2) 26) 1)) "cba")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 2) 26) 2)) "cbb")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 2) 26) 3)) "cbc")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 3) 26) 1)) "cca")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 3) 26) 2)) "ccb")
+    (check-equal? (alpha (+ (* (+ (* 3 26) 3) 26) 3)) "ccc")
+    ))
 

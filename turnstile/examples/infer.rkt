@@ -25,18 +25,18 @@
 
 (define-typed-syntax #%app
   [(_ e_fn e_arg ...) ≫
-   [#:with [A ...] (map id-titlecase (generate-temporaries #'[e_arg ...]))]
-   [#:with B (generate-temporary 'R)]
+   [#:with [A ...] (gen-alphabetical-tyvars #'[e_arg ...])]
+   [#:with R (generate-temporary 'R)]
    [⊢ [[e_fn ≫ e_fn-] ⇒ : τ_fn*]]
    [#:with (~?Some [V1 ...] (~?∀ (V2 ...) τ_fn) (~Cs [τ_3 τ_4] ...))
     (syntax-local-introduce #'τ_fn*)]
-   [#:with τ_fn-expected (tycons #'→ #'[A ... B])]
+   [#:with τ_fn-expected (tycons #'→ #'[A ... R])]
    [⊢ [[e_arg ≫ e_arg-] ⇒ : τ_arg*] ...]
    [#:with [(~?Some [V3 ...] (~?∀* (V4 ...) τ_arg) (~Cs [τ_5 τ_6] ...)) ...]
     (syntax-local-introduce #'[τ_arg* ...])]
-   [#:with Xs #'[A ... B V1 ... V2 ... V3 ... ... V4 ... ...]]
+   [#:with Xs #'[A ... R V1 ... V2 ... V3 ... ... V4 ... ...]]
    [#:with τ_out (some/inst/generalize #'Xs
-                                       #'B
+                                       #'R
                                        (list
                                         #'([τ_3 τ_4] ...
                                            [τ_5 τ_6] ... ...)

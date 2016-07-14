@@ -47,13 +47,13 @@
 
 (typecheck-fail
  (λ (f) (f f))
- #:with-msg "couldn't unify F[0-9]+ and \\(→ F[0-9]+ R[0-9]+\\) because one contains the other")
+ #:with-msg "couldn't unify A[0-9]+ and \\(→ A[0-9]+ R[0-9]+\\) because one contains the other")
 
 (typecheck-fail
  (λ (f)
    ((λ (g) (f (λ (x) ((g g) x))))
     (λ (g) (f (λ (x) ((g g) x))))))
- #:with-msg "couldn't unify G[0-9]+ and \\(→ G[0-9]+ R[0-9]+\\) because one contains the other")
+ #:with-msg "couldn't unify A[0-9]+ and \\(→ A[0-9]+ R[0-9]+\\) because one contains the other")
 
 (define fact-builder
   (λ (fact)
@@ -227,7 +227,7 @@
 ; list abbrv
 (check-type (list 1 2 3) : (List Int))
 (typecheck-fail (list 1 "3")
- #:with-msg "expected: Temp[0-9]+, \\(List Temp[0-9]+\\)\n *given: Int, \\(List String\\)")
+ #:with-msg "expected: A[0-9]+, \\(List A[0-9]+\\)\n *given: Int, \\(List String\\)")
 
 
 (define/rec #:∀ (X Y) (map [f : (→ X Y)] [lst : (List X)]) -> (List Y)
@@ -484,7 +484,7 @@
 (typecheck-fail
  (λ (f) ((ann f : Int) 1 2))
  #:with-msg
- "expected: \\(→ Temp[0-9]+ Temp[0-9]+ R[0-9]+\\)\n *given: Int")
+ "expected: \\(→ A[0-9]+ B[0-9]+ R[0-9]+\\)\n *given: Int")
 
 (check-type (λ (f x y) (f x y))
             : (∀ (X Y R) (→ (→ X Y R) X Y R)))
@@ -498,7 +498,7 @@
 (check-type (λ (x) (+ x x)) : (→ Int Int))
 (typecheck-fail
  ((λ (x y) y) 1)
- #:with-msg "expected: \\(→ Temp[0-9]+ R[0-9]+\\)\n *given: \\(→ X[0-9]+ Y[0-9]+ Y[0-9]+\\)")
+ #:with-msg "expected: \\(→ A[0-9]+ R[0-9]+\\)\n *given: \\(→ X[0-9]+ Y[0-9]+ Y[0-9]+\\)")
 
 (check-type ((λ (x) (+ x x)) 10) : Int -> 20)
 
