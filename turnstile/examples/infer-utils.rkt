@@ -189,7 +189,8 @@
      (for/list ([i (in-range (stx-length vs))])
        (string-titlecase (alphabetical-string (add1 i))))))
 
-  (define alphabet (string->list "abcdefghijklmnopqrstuvwxyz"))
+  (define alphabet "abcdefghijklmnopqrstuvwxyz")
+  (define alphabet-length (string-length alphabet))
 
   ;; alphabetical-string : Positive-Integer -> String
   (define (alphabetical-string i)
@@ -201,9 +202,9 @@
           [else
            (define-values [q r]
              ;; anyone know why there's a sub1 here?
-             (quotient/remainder (sub1 i) 26))
+             (quotient/remainder (sub1 i) alphabet-length))
            (alphabetical-char-list q
-             (cons (list-ref alphabet r) acc))]))
+             (cons (string-ref alphabet r) acc))]))
 
   )
 
