@@ -93,6 +93,13 @@
 (check-type (fact 7) : Int -> 5040)
 (check-type (fact 8) : Int -> 40320)
 
+;; TODO: fix this error message
+#;(typecheck-fail
+ ((λ (x) (+ x 1))
+  ((λ (y) (if y #true #false))
+   #false))
+ #:with-msg "expected: Int\n *given: Bool")
+
 ;; match tests
 
 (check-type (match 1 with [(v: x) -> x]) : Int -> 1)
