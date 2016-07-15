@@ -197,12 +197,11 @@
 
   ;; alphabetic-char-list : Positive-Integer (Listof Char) -> (Listof Char)
   (define (alphabetical-char-list i acc)
-    (define-values [q r]
-      ;; anyone know why there's a sub1 here?
-      (quotient/remainder (sub1 i) 26))
-    (cond [(zero? q)
-           (cons (list-ref alphabet r) acc)]
+    (cond [(zero? i) acc]
           [else
+           (define-values [q r]
+             ;; anyone know why there's a sub1 here?
+             (quotient/remainder (sub1 i) 26))
            (alphabetical-char-list q
              (cons (list-ref alphabet r) acc))]))
 
@@ -213,6 +212,7 @@
 (module+ test
   (begin-for-syntax
     (define alpha alphabetical-string)
+    (check-equal? (alpha 0) "")
     (check-equal? (alpha 1) "a")
     (check-equal? (alpha 2) "b")
     (check-equal? (alpha 3) "c")
