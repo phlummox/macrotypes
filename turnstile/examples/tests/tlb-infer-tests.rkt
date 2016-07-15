@@ -126,6 +126,12 @@
                   (f 6)))
             : Int -> 5)
 
+(check-type (let ([double (λ (f) (λ (a) (f (f a))))])
+              (tup (double (λ (x) (+ x 1)))
+                   (double (λ (b) (if b b #false)))
+                   (double double)))
+            : (∀ (X) (× (→ Int Int) (→ Bool Bool) (→ (→ X X) (→ X X)))))
+
 ;; letrec tests
 
 (check-type (letrec () 1) : Int -> 1)
@@ -180,6 +186,49 @@
                           (cons (f (first lst)) ((mapper f) (rest lst))))))])
    ((mapper (mapper factorial)) (list (list 0 1 2) (list 3 4 5) (list 6 7 8))))
  : (List (List Int)) -> (list (list 1 1 2) (list 6 24 120) (list 720 5040 40320)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define lctrue (λ (t f) (t)))
+(define lcfalse (λ (t f) (f)))
+
+(define lcif (λ (c t e) (c t e)))
+
+(check-type (lcif lctrue (λ () 1) (λ () 2)) : Int -> 1)
+(check-type (lcif lcfalse (λ () 1) (λ () 2)) : Int -> 2)
+
+;; TODO: get this something like this type working
+;; (define-type (LCNat X)
+;;   (→
+;;    (→ X) ; zero case
+;;    (→ (LCNat X) X) ; add1 case
+;;    X))
+(define lc0 (λ (z s) (z)))
+(check-type lc0 : (∀ (R S) (→ (→ R) S R)))
+(check-type (lc0 (λ () 0) (λ (n-1) 1))
+            : Int -> 0)
+
+;(define lcadd1 (λ (n) (λ (z s) (s n))))
+;(define lcsub1 (λ (n) (n (λ () lc0) (λ (n-1) n-1))))
+;(define lc1 (lcadd1 lc0))
+
+;(check-type (lc1 (λ () 0) (λ (n-1) 1))
+;            : Int -> 1)
+
+;(define tuplc+lc-lc*
+;  (letrec ([lc+ (λ (a b)
+;                  (a (λ () b)
+;                     (λ (a-1) (lc+ a-1 (lcadd1 b)))))]
+;           [lc- (λ (a b)
+;                  (b (λ () a)
+;                     (λ (b-1) (lc- (lcsub1 a) b-1))))]
+;           [lc* (λ (a b)
+;                  (a (λ () a)
+;                     (λ (a-1) (lc+ b (lc* a-1 b)))))])
+;    (tup lc+ lc- lc*)))
+;(define lc+ (match tuplc+lc-lc* [(tup: (v: lc+) (v: lc-) (v: lc*)) lc+]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; from the old infer tests
 
