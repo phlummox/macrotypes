@@ -20,8 +20,14 @@
    [#:with τ_fn (some/inst/generalize #'[X- ... V ...]
                                       #'(→ X- ... τ_body)
                                       (list #'([id_2 τ_2] ...)))]
+   [#:with fn #'(λ- (x- ...) body-)]
+   [#:with fn+ (syntax-property #'fn 'mouse-over-tooltips
+                                (vector-immutable stx
+                                                  (syntax-position stx)
+                                                  (+ (syntax-position stx) (syntax-span stx))
+                                                  (type->str #'τ_fn)))]
    --------
-   [⊢ [[_ ≫ (λ- (x- ...) body-)] ⇒ : τ_fn]]])
+   [⊢ [[_ ≫ fn+] ⇒ : τ_fn]]])
 
 (define-typed-syntax #%app
   [(_ e_fn e_arg ...) ≫
@@ -212,5 +218,6 @@
 
 (define-primop abs : (→ Int Int))
 
+(define-primop error : (∀ (X) (→ String X)))
 
 

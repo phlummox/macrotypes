@@ -208,8 +208,10 @@
 (check-type (lc0 (λ () 0) (λ (n-1) 1))
             : Int -> 0)
 
-;(define lcadd1 (λ (n) (λ (z s) (s n))))
-;(define lcsub1 (λ (n) (n (λ () lc0) (λ (n-1) n-1))))
+(define lcadd1 (λ (n) (λ (z s) (s n))))
+(define lcsub1 (λ (n) (n (λ () (error "can't subtract one from zero")) (λ (n-1) n-1))))
+(check-type lcadd1 : (∀ (N) (→ N (∀ (Z R) (→ Z (→ N R) R)))))
+(check-type lcsub1 : (∀ (Y R) (→ (→ (→ (∀ (X) X)) (→ Y Y) R) R)))
 ;(define lc1 (lcadd1 lc0))
 
 ;(check-type (lc1 (λ () 0) (λ (n-1) 1))
