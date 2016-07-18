@@ -35,9 +35,13 @@
      (Cs #'([a b] ...))]))
 (begin-for-syntax
   (define (?∀ Xs τ)
-    (if (stx-null? Xs)
-        τ
-        #`(∀ #,Xs #,τ)))
+    (syntax-parse τ
+      [(~?∀ (Y ...) τ)
+       #:with [X ...] Xs
+       (define XYs (find-free-Xs/type-order #'(X ... Y ...) #'τ))
+       (if (stx-null? XYs)
+           #'τ
+           #`(∀ #,XYs τ))]))
   (define (?Some Xs τ cs)
     (if (and (stx-null? Xs) (stx-null? cs))
         τ
@@ -168,7 +172,7 @@
         c))
     (?Some
      (set-minus/Xs constrainable-Xs concrete-constrainable-Xs)
-     (?∀ (find-free-Xs/type-order unconstrainable-Xs ty) ty)
+     (?∀ unconstrainable-Xs ty)
      cs3))
 
   (define (datum=? a b)

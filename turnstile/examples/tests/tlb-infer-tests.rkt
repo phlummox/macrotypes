@@ -205,17 +205,66 @@
 ;;    X))
 (define lc0 (λ (z s) (z)))
 (check-type lc0 : (∀ (R S) (→ (→ R) S R)))
-(check-type (lc0 (λ () 0) (λ (n-1) 1))
-            : Int -> 0)
 
 (define lcadd1 (λ (n) (λ (z s) (s n))))
 (define lcsub1 (λ (n) (n (λ () (error "can't subtract one from zero")) (λ (n-1) n-1))))
 (check-type lcadd1 : (∀ (N) (→ N (∀ (Z R) (→ Z (→ N R) R)))))
 (check-type lcsub1 : (∀ (Y R) (→ (→ (→ (∀ (X) X)) (→ Y Y) R) R)))
-;(define lc1 (lcadd1 lc0))
 
-;(check-type (lc1 (λ () 0) (λ (n-1) 1))
-;            : Int -> 1)
+(define lc1 (lcadd1 lc0))
+(define lc2 (lcadd1 lc1))
+(define lc3 (lcadd1 lc2))
+
+(check-type (lc0 (λ () 0) (λ (n-1) 1)) : Int -> 0)
+(check-type (lc1 (λ () 0) (λ (n-1) 1)) : Int -> 1)
+(check-type (lc2 (λ () 0) (λ (n-1) 1)) : Int -> 1)
+(check-type (lc3 (λ () 0) (λ (n-1) 1)) : Int -> 1)
+
+(check-type (lc1 (λ () 0) (λ (n-1) (n-1 (λ () 1) (λ (n-2) 2))))
+            : Int -> 1)
+(check-type (lc2 (λ () 0) (λ (n-1) (n-1 (λ () 1) (λ (n-2) 2))))
+            : Int -> 2)
+(check-type (lc3 (λ () 0) (λ (n-1) (n-1 (λ () 1) (λ (n-2) 2))))
+            : Int -> 2)
+
+(check-type (lc2 (λ () 0) (λ (n-1) (n-1 (λ () 1) (λ (n-2) (n-2 (λ () 2) (λ (n-3) 3))))))
+            : Int -> 2)
+(check-type (lc3 (λ () 0) (λ (n-1) (n-1 (λ () 1) (λ (n-2) (n-2 (λ () 2) (λ (n-3) 3))))))
+            : Int -> 3)
+
+(define lcnat->int
+  (λ (n)
+    (n (λ () 0)
+       (λ (n-1)
+         (n-1
+          (λ () 1)
+          (λ (n-2)
+            (n-2
+             (λ () 2)
+             (λ (n-3)
+               (n-3
+                (λ () 3)
+                (λ (n-4)
+                  4))))))))))
+
+(define int->lcnat
+  (λ (n)
+    (if (= 0 n)
+        lc0
+        (if (= 1 n)
+            lc1
+            (if (= 2 n)
+                lc2
+                lc3)))))
+
+(check-type (lcnat->int lc0) : Int -> 0)
+(check-type (lcnat->int lc1) : Int -> 1)
+(check-type (lcnat->int lc2) : Int -> 2)
+(check-type (lcnat->int lc3) : Int -> 3)
+(check-type (lcnat->int (int->lcnat 0)) : Int -> 0)
+(check-type (lcnat->int (int->lcnat 1)) : Int -> 1)
+(check-type (lcnat->int (int->lcnat 2)) : Int -> 2)
+(check-type (lcnat->int (int->lcnat 3)) : Int -> 3)
 
 ;(define tuplc+lc-lc*
 ;  (letrec ([lc+ (λ (a b)
