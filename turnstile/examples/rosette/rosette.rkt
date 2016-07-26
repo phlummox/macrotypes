@@ -41,20 +41,20 @@
 
 (define-typed-syntax choose
  [(ch e ...+) ≫
-  [⊢ [[e ≫ e-] ⇒ : ty]] ...
+  [⊢ [e ≫ e- ⇒ : ty]] ...
    --------
   ;; the #'choose identifier itself must have the location of its use
   ;; see define-synthax implementation, specifically syntax/source in utils
-  [⊢ [[_ ≫ (#,(syntax/loc #'ch ro:choose) e- ...)] ⇒ : (⊔ ty ...)]]])
+  [⊢ [_ ≫ (#,(syntax/loc #'ch ro:choose) e- ...) ⇒ : (⊔ ty ...)]]])
 
 (define-typed-syntax app #:export-as #%app
   [(_ e_fn e_arg ...) ≫
-   [⊢ [[e_fn ≫ e_fn-] ⇒ : (~→ τ_in ... τ_out)]]
+   [⊢ [e_fn ≫ e_fn- ⇒ : (~→ τ_in ... τ_out)]]
    [#:fail-unless (stx-length=? #'[τ_in ...] #'[e_arg ...])
     (num-args-fail-msg #'e_fn #'[τ_in ...] #'[e_arg ...])]
-   [⊢ [[e_arg ≫ e_arg-] ⇐ : τ_in] ...]
+   [⊢ [e_arg ≫ e_arg- ⇐ : τ_in] ...]
    --------
-   [⊢ [[_ ≫ (ro:#%app e_fn- e_arg- ...)] ⇒ : τ_out]]])
+   [⊢ [_ ≫ (ro:#%app e_fn- e_arg- ...) ⇒ : τ_out]]])
 
 ;; ----------------------------------------------------------------------------
 ;; Racket stuff
