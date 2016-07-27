@@ -8,6 +8,18 @@
 (check-type (+ 1.1 1) : Num -> 2.1)
 (typecheck-fail (+ "1" 1) #:with-msg "expected Num, given String")
 
+;; case-> subtyping
+(check-type ((λ ([f : (→ Int Int)]) (f 10)) add1) : Int -> 11)
+(check-type ((λ ([f : (case-> (→ Int Int))]) (f 10)) add1) : Int -> 11)
+(check-type ((λ ([f : (case-> (→ Nat Nat)
+                              (→ Int Int))]) (f 10)) add1) : Int -> 11)
+(check-not-type ((λ ([f : (case-> (→ Int Int))]) (f 10)) add1) : Nat)
+(check-type ((λ ([f : (case-> (→ Nat Nat)
+                              (→ Int Int))]) (f 10)) add1) : Nat -> 11)
+(typecheck-fail ((λ ([f : (case-> (→ Zero Zero)
+                                  (→ Int Int))]) (f 10)) add1) 
+ #:with-msg "expected \\(case-> \\(→ Zero Zero\\) \\(→ Int Int\\)\\), given \\(case→ \\(→ Nat Nat\\) \\(→ Int Int\\)")
+
 ;; Alex's example
 ;; illustrates flattening
 (define-type-alias A Int)
@@ -64,6 +76,7 @@
 (check-type ((λ ([x : Int] [y : Int]) x) -1 1) : Int -> -1)
 (check-not-type (λ ([x : Int]) x) : Int)
 (check-type (λ ([x : Int]) x) : (→ Int Int))
+(check-type (λ ([f : (→ Int Int)]) 1) : (→ (→ Int Int) PosInt))
 (check-type (λ ([f : (→ Int Int)]) 1) : (→ (→ Int Int) Nat))
 (check-type ((λ ([x : Int]) x) 1) : Int ⇒ 1)
 (typecheck-fail ((λ ([x : Sym]) x) 1)) ; Sym is not valid type
