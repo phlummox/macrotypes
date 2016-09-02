@@ -61,6 +61,7 @@
 ;; CMVectorof includes only mutable vectors
 (define-type-constructor CIVectorof #:arity = 1)
 (define-type-constructor CMVectorof #:arity = 1)
+(define-type-constructor CBoxof #:arity = 1)
 (define-named-type-alias (CVectorof X) (CU (CIVectorof X) (CMVectorof X)))
 (define-type-constructor CList #:arity >= 0)
 
@@ -128,7 +129,11 @@
 (define-syntax →
   (syntax-parser
     [(_ ty ...+) 
-     (add-orig #'(U (C→ ty ...)) this-syntax)]))
+     (add-pred
+      (add-orig 
+       #'(U (C→ ty ...)) 
+       this-syntax)
+      #'ro:fv?)]))
 
 (define-syntax define-symbolic-named-type-alias
   (syntax-parser
@@ -149,8 +154,11 @@
 ;; ---------------------------------
 ;; define-symbolic
 
-(define-typed-syntax define-symbolic
+(define-typed-syntax define-symbolic #:datum-literals (:)
   [(_ x:id ...+ pred : ty:type) ≫
+   #:fail-when (concrete? #'ty.norm)
+               (format "A symbolic value cannot have a concrete type, given ~a." 
+                       (type->str #'ty.norm))
    ;; TODO: still unsound
    [⊢ [pred ≫ pred- ⇐ : (C→ ty.norm Bool)]]
    #:with (y ...) (generate-temporaries #'(x ...))
@@ -159,8 +167,11 @@
           (define-syntax- x (make-rename-transformer (⊢ y : ty.norm))) ...
           (ro:define-symbolic y ... pred-))]])
 
-(define-typed-syntax define-symbolic*
+(define-typed-syntax define-symbolic* #:datum-literals (:)
   [(_ x:id ...+ pred : ty:type) ≫
+   #:fail-when (concrete? #'ty.norm)
+               (format "A symbolic value cannot have a concrete type, given ~a." 
+                       (type->str #'ty.norm))
    ;; TODO: still unsound
    [⊢ [pred ≫ pred- ⇐ : (C→ ty.norm Bool)]]
    #:with (y ...) (generate-temporaries #'(x ...))
@@ -531,7 +542,35 @@
 (define-rosette-primop void : (C→ CUnit))
 
 ;; ---------------------------------
+;; mutable boxes
+
+(define-typed-syntax box
+  [(_ e) ≫
+   [⊢ [e ≫ e- ⇒ : τ]]
+   --------
+   [⊢ [_ ≫ (ro:box e-) ⇒ : (CBoxof τ)]]])
+
+(define-typed-syntax unbox
+  [(_ e) ≫
+   [⊢ [e ≫ e- ⇒ : (~CBoxof τ)]]
+   --------
+   [⊢ [_ ≫ (ro:unbox e-) ⇒ : τ]]])
+
+;; ---------------------------------
 ;; Types for built-in operations
+
+;; cannot use concrete? to produce possibly concrete output
+;; because of data structures
+#;(define-typed-syntax equal?
+  [_:id ≫ ;; TODO: use polymorphism
+   --------
+   [⊢ [_ ≫ ro:equal? ⇒ : (C→ Any Any Bool)]]]
+  [(_ e1 e2) ≫
+   [⊢ [e1 ≫ e1- ⇒ : τ1]]
+   [⊢ [e2 ≫ e2- ⇒ : τ2]]
+   --------
+   [⊢ [_ ≫ (ro:equal? e1- e2-) ⇒ : 
+           #,(if (and (concrete? #'τ1) (concrete? #'τ2)) #'CBool #'Bool)]]])
 
 (define-rosette-primop equal? : (C→ Any Any Bool))
 (define-rosette-primop eq? : (C→ Any Any Bool))
@@ -715,6 +754,15 @@
 
 (define-rosette-primop bitvector-size : (C→ CBVPred CPosInt))
 
+
+;; ---------------------------------
+;; Uninterpreted functions
+
+(define-typed-syntax ~>
+  [(_ e ...+) ≫
+   [⊢ [e ≫ e- ⇐ : (C→ Nothing Bool)] ...]
+   --------
+   [⊢ [_ ≫ (ro:~> e- ...) ⇒ : (C→ Any Bool)]]])
 
 ;; ---------------------------------
 ;; Logic operators
