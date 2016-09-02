@@ -538,7 +538,8 @@
 (define-rosette-primop printf : (Ccase-> (C→ CString CUnit)
                                          (C→ CString Any CUnit)
                                          (C→ CString Any Any CUnit)))
-(define-rosette-primop error : (C→ (CU CString CSymbol) Nothing))
+(define-rosette-primop error : (Ccase-> (C→ (CU CString CSymbol) Nothing)
+                                        (C→ CSymbol CString Nothing)))
 (define-rosette-primop void : (C→ CUnit))
 
 ;; ---------------------------------
@@ -574,6 +575,13 @@
 
 (define-rosette-primop equal? : (C→ Any Any Bool))
 (define-rosette-primop eq? : (C→ Any Any Bool))
+(define-rosette-primop distinct? : (Ccase-> (C→ Bool)
+                                            (C→ Any Bool)
+                                            (C→ Any Any Bool)
+                                            (C→ Any Any Any Bool)
+                                            (C→ Any Any Any Any Bool)
+                                            (C→ Any Any Any Any Any Bool)
+                                            (C→ Any Any Any Any Any Any Bool)))
 
 (define-rosette-primop pi : CNum)
 
@@ -645,6 +653,8 @@
                                     (C→ Num Num Num)
                                     (C→ Num Num Num Num)
                                     (C→ Num Num Num Num Num)))
+(define-rosette-primop / : (Ccase-> (C→ CNum CNum CNum)
+                                    (C→ Num Num Num)))
 (define-rosette-primop = : (Ccase-> (C→ CNum CNum CBool)
                                     (C→ Num Num Bool)))
 (define-rosette-primop < : (Ccase-> (C→ CNum CNum CBool)
@@ -666,22 +676,51 @@
                                       (C→ Int Int)
                                       (C→ CNum CNum)
                                       (C→ Num Num)))
+(define-rosette-primop max : (Ccase-> (C→ CNum CNum CNum)
+                                      (C→ Num Num Num))) 
+(define-rosette-primop min : (Ccase-> (C→ CNum CNum CNum)
+                                      (C→ Num Num Num)))
+(define-rosette-primop floor : (Ccase-> (C→ CNum CInt)
+                                        (C→ Num Int)))
+(define-rosette-primop ceiling : (Ccase-> (C→ CNum CInt)
+                                          (C→ Num Int)))
+(define-rosette-primop truncate : (Ccase-> (C→ CNum CInt)
+                                           (C→ Num Int)))
+(define-rosette-primop expt : (Ccase-> (C→ CNum CNum CNum)
+                                       (C→ Num Num Num)))
+(define-rosette-primop sgn : (Ccase-> (C→ CNum CInt)
+                                      (C→ Num Int)))
 
 (define-rosette-primop not : (C→ Any Bool))
+(define-rosette-primop xor : (C→ Any Any Any))
 (define-rosette-primop false? : (C→ Any Bool))
 
-;; TODO: fix types of these predicates
+(define-rosette-primop true : CTrue)
+(define-rosette-primop false : CFalse)
 (define-rosette-primop boolean? : (C→ Any Bool))
 (define-rosette-primop integer? : (C→ Any Bool))
 (define-rosette-primop real? : (C→ Any Bool))
+(define-rosette-primop number? : (C→ Any Bool))
 (define-rosette-primop positive? : (Ccase-> (C→ CNum CBool)
                                             (C→ Num Bool)))
+(define-rosette-primop negative? : (Ccase-> (C→ CNum CBool)
+                                            (C→ Num Bool)))
+(define-rosette-primop zero? : (Ccase-> (C→ CNum CBool)
+                                        (C→ Num Bool)))
 (define-rosette-primop even? : (Ccase-> (C→ CInt CBool)
                                         (C→ Int Bool)))
 (define-rosette-primop odd? : (Ccase-> (C→ CInt CBool)
                                        (C→ Int Bool)))
+(define-rosette-primop inexact->exact : (Ccase-> (C→ CNum CNum)
+                                                 (C→ Num Num)))
+(define-rosette-primop exact->inexact : (Ccase-> (C→ CNum CNum)
+                                                 (C→ Num Num)))
+(define-rosette-primop quotient : (Ccase-> (C→ CInt CInt CInt)
+                                           (C→ Int Int Int)))
 (define-rosette-primop remainder : (Ccase-> (C→ CInt CInt CInt)
                                             (C→ Int Int Int)))
+(define-rosette-primop modulo : (Ccase-> (C→ CInt CInt CInt)
+                                         (C→ Int Int Int)))
 ;; rosette-specific
 (define-rosette-primop asserts : (C→ (CListof Bool)))
 (define-rosette-primop clear-asserts! : (C→ CUnit))
@@ -782,15 +821,50 @@
    [⊢ [_ ≫ (ro:|| e- ...) ⇒ : Bool]]])
 
 (define-typed-syntax and
+  [(_) ≫
+   --------
+   [⊢ [_ ≫ (ro:and) ⇒ : CTrue]]]
   [(_ e ...) ≫
    [⊢ [e ≫ e- ⇐ : Bool] ...]
    --------
-   [⊢ [_ ≫ (ro:and e- ...) ⇒ : Bool]]])
+   [⊢ [_ ≫ (ro:and e- ...) ⇒ : Bool]]]
+  [(_ e ... elast) ≫
+   [⊢ [e ≫ e- ⇒ : ty] ...]
+   [⊢ [elast ≫ elast- ⇒ : ty-last]]
+   --------
+   [⊢ [_ ≫ (ro:and e- ... elast-) ⇒ : (U CFalse ty-last)]]])
 (define-typed-syntax or
+  [(_) ≫
+   --------
+   [⊢ [_ ≫ (ro:or) ⇒ : CFalse]]]
   [(_ e ...) ≫
    [⊢ [e ≫ e- ⇐ : Bool] ...]
    --------
-   [⊢ [_ ≫ (ro:or e- ...) ⇒ : Bool]]])
+   [⊢ [_ ≫ (ro:or e- ...) ⇒ : Bool]]]
+  [(_ e ...) ≫
+   [⊢ [e ≫ e- ⇒ : ty] ...]
+   --------
+   [⊢ [_ ≫ (ro:or efirst- e- ...) ⇒ : (U ty ...)]]])
+(define-typed-syntax nand
+  [(_) ≫
+   --------
+   [⊢ [_ ≫ (ro:nand) ⇒ : CFalse]]]
+  [(_ e ...) ≫
+   [⊢ [e ≫ e- ⇒ : _] ...]
+   --------
+   [⊢ [_ ≫ (ro:nand e- ...) ⇒ : Bool]]])
+(define-typed-syntax nor
+  [(_) ≫
+   --------
+   [⊢ [_ ≫ (ro:nor) ⇒ : CTrue]]]
+  [(_ e ...) ≫
+   [⊢ [e ≫ e- ⇒ : _] ...]
+   --------
+   [⊢ [_ ≫ (ro:nor e- ...) ⇒ : Bool]]])
+(define-typed-syntax implies
+  [(_ e1 e2) ≫
+   --------
+   [_ ≻ (if e1 e2 (stlc+union:#%datum . #t))]])
 
 ;; ---------------------------------
 ;; solver forms
