@@ -538,6 +538,7 @@
 (define-rosette-primop printf : (Ccase-> (C→ CString CUnit)
                                          (C→ CString Any CUnit)
                                          (C→ CString Any Any CUnit)))
+(define-rosette-primop displayln : (C→ Any CUnit))
 (define-rosette-primop error : (Ccase-> (C→ (CU CString CSymbol) Nothing)
                                         (C→ CSymbol CString Nothing)))
 (define-rosette-primop void : (C→ CUnit))
@@ -718,7 +719,9 @@
                                           (C→ Num Num)))
 (define-rosette-primop truncate : (Ccase-> (C→ CNum CNum)
                                            (C→ Num Num)))
-(define-rosette-primop sgn : (Ccase-> (C→ CInt CInt)
+(define-rosette-primop sgn : (Ccase-> (C→ CZero CZero)
+                                      (C→ Zero Zero)
+                                      (C→ CInt CInt)
                                       (C→ Int Int)
                                       (C→ CNum CNum)
                                       (C→ Num Num)))
@@ -847,6 +850,7 @@
 
 (define-rosette-primop ! : (C→ Bool Bool))
 (define-rosette-primop <=> : (C→ Bool Bool Bool))
+(define-rosette-primop => : (C→ Bool Bool Bool))
 
 (define-typed-syntax &&
   [(_ e ...) ≫
@@ -910,7 +914,11 @@
 
 (define-base-types CSolution CPict)
 
-(define-rosette-primop core : (C→ Any Any))
+(define-rosette-primop core : (C→ CSolution (U (Listof Any) CFalse)))
+; TODO: implement hash
+(define-rosette-primop model : (C→ CSolution Any))
+(define-rosette-primop sat : (Ccase-> (C→ CSolution)
+                                      (C→ Any CSolution)))
 (define-rosette-primop sat? : (C→ Any Bool))
 (define-rosette-primop unsat? : (C→ Any Bool))
 (define-rosette-primop unsat : (Ccase-> (C→ CSolution)
