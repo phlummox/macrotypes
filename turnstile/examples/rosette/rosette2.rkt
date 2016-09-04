@@ -62,6 +62,8 @@
 (define-type-constructor CIVectorof #:arity = 1)
 (define-type-constructor CMVectorof #:arity = 1)
 (define-type-constructor CBoxof #:arity = 1)
+;; TODO: Hash subtyping?
+(define-type-constructor HashTable #:arity = 2)
 (define-named-type-alias (CVectorof X) (CU (CIVectorof X) (CMVectorof X)))
 (define-type-constructor CList #:arity >= 0)
 
@@ -426,6 +428,11 @@
    [⊢ [_ ≫ (ro:vector-immutable e- ...) ⇒ : (if (stx-andmap concrete? #'(τ ...))
                                                 #'(CIVectorof (CU τ ...))
                                                 #'(CIVectorof (U τ ...)))]]])
+
+;; ---------------------------------
+;; hash tables
+
+(define-rosette-primop hash-keys : (C→ (HashTable Any Any) (CListof Any)))
 
 ;; ---------------------------------
 ;; lists
@@ -916,9 +923,9 @@
 
 (define-rosette-primop core : (C→ CSolution (U (Listof Any) CFalse)))
 ; TODO: implement hash
-(define-rosette-primop model : (C→ CSolution Any))
+(define-rosette-primop model : (C→ CSolution (HashTable Any Any)))
 (define-rosette-primop sat : (Ccase-> (C→ CSolution)
-                                      (C→ Any CSolution)))
+                                      (C→ (HashTable Any Any) CSolution)))
 (define-rosette-primop sat? : (C→ Any Bool))
 (define-rosette-primop unsat? : (C→ Any Bool))
 (define-rosette-primop unsat : (Ccase-> (C→ CSolution)
