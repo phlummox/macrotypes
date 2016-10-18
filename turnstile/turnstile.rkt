@@ -6,7 +6,8 @@
          (rename-out [define-typed-syntax define-typerule])
          (for-syntax syntax-parse/typed-syntax))
 
-(require (except-in (rename-in
+(require (for-syntax racket/stxparam)
+         (except-in (rename-in
                      macrotypes/typecheck
                      [define-typed-syntax -define-typed-syntax]
                      [define-syntax-category -define-syntax-category]
@@ -387,25 +388,24 @@
          (for-meta 2 'syntax-classes))
 
 (define-syntax define-typed-syntax
-  (lambda (stx)
-    (syntax-parse stx
+  (lambda (def-stx)
+    (syntax-parse def-stx
       ;; single-clause def
       [(def (name:id . pats) . rst)
        ;; cannot always bind name as pat var, eg #%app, so replace with _
-       #:with r:rule #'[(_ . pats) . rst]
-       #'(-define-typed-syntax name r.norm)]
+       #'(define-typed-syntax name [(_ . pats) . rst])]
       ;; multi-clause def
-      [(def name:id
-         (~and (~seq kw-stuff ...) :stxparse-kws)
-         rule:rule
-         ...+)
-       #'(-define-typed-syntax
-          name
-          kw-stuff ...
-          rule.norm
-          ...)])))
+      [(def name:id option-or-rule ...+)
+       #'(define-syntax name
+           (lambda (syntx)
+             (syntax-parameterize ([stx (make-rename-transformer #'syntx)])
+               (parameterize ([current-syntax-check-relation
+                               (current-typecheck-relation)])
+                 (syntax-parse/typed-syntax syntx option-or-rule ...)))))])))
 
 (begin-for-syntax
+  ;; Uses whatever current-syntax-check-relation is set to whenever
+  ;; a rule uses ⇐ or τ⊑
   (define-syntax syntax-parse/typed-syntax
     (lambda (stx)
       (syntax-parse stx
@@ -435,13 +435,13 @@
             ;; cannot bind name as pat var, eg #%app, so replace with _
             #:with r #'[(_ . pats) . rst]
             #'(define-syntax (rulename stxx)
-                (parameterize ([current-typecheck-relation (check-relation)])
+                (parameterize ([current-syntax-check-relation (check-relation)])
                   (syntax-parse/typed-syntax stxx r)))]
            ;; multi-clause def
            [(_ rulename:id
               (~and (~seq kw-stuff (... ...)) :stxparse-kws)
               rule:rule (... ...+))
             #'(define-syntax (rulename stxx)
-                (parameterize ([current-typecheck-relation (check-relation)])
+                (parameterize ([current-syntax-check-relation (check-relation)])
                   (syntax-parse/typed-syntax stxx kw-stuff (... ...)
                     rule (... ...))))])))])))

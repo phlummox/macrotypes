@@ -566,6 +566,17 @@
   (define (get-type-tags ts)
     (stx-map get-type-tag ts)))
 
+(begin-for-syntax
+  ;; current-syntax-check-relation : (Parameterof (-> Stx Stx Boolean))
+  ;; Used by syntax-parse/typed-syntax for `⇐`s and `τ⊑`s.
+  ;; Within define-typed-syntax, this will be parameterized to the value of
+  ;; the (current-typecheck-relation) parameter,
+  ;; within define-kinded-syntax, this will be parameterized to the value of
+  ;; the (current-kindcheck-relation) parameter,
+  ;; and so on for other syntax caterories.
+  (define current-syntax-check-relation
+    (make-parameter (λ (a b) #false))))
+
 (define-syntax define-basic-checked-id-stx
   (syntax-parser #:datum-literals (:)
     [(_ τ:id : kind)
