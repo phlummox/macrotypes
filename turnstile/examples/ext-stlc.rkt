@@ -51,6 +51,17 @@
             #:with τ:any-type #'ty
             #'τ.norm]))]))
 
+(begin-for-syntax
+  (define (transfer-prop p from to)
+    (define v (syntax-property from p))
+    (syntax-property to p v))
+  (define (transfer-props from to)
+    (define props (syntax-property-symbol-keys from))
+    (define props/filtered (remove 'origin (remove 'orig (remove ': props))))
+    (foldl (lambda (p stx) (transfer-prop p from stx)) 
+           to 
+           props/filtered)))
+
 (define-typed-syntax define
   [(_ x:id : τ:type e:expr) ≫
    ;This wouldn't work with mutually recursive definitions
@@ -63,9 +74,10 @@
   [(_ x:id e) ≫
    [⊢ e ≫ e- ⇒ τ]
    #:with y (generate-temporary #'x)
+   #:with y+props (transfer-props #'e- (assign-type #'y #'τ))
    --------
    [≻ (begin-
-        (define-syntax x (make-rename-transformer (⊢ y : τ)))
+        (define-syntax x (make-rename-transformer #'y+props))
         (define- y e-))]])
 
 (define-typed-syntax #%datum
